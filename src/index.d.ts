@@ -113,6 +113,62 @@ export type GroupInfo = {
 
 export type CollisionMode = "none" | "simple" | "precise";
 
+export type OutlineOptions = {
+  color?: string;
+  opacity?: number;
+  linewidth?: number;
+  thresholdAngle?: number;
+};
+
+export type ASCIIVariant = "multicolor" | "monochromatic";
+
+export type ASCIIModeOptions = {
+  enabled?: boolean;
+  variant?: ASCIIVariant;
+  characters?: string[] | string;
+  columns?: number;
+  columnAmount?: number;
+  rows?: number;
+  lightWeight?: number;
+  distanceWeight?: number;
+  alphaThreshold?: number;
+  backgroundColor?: string;
+  monochromaticDark?: string;
+  monochromaticLight?: string;
+  colorPalette?: string[] | null;
+  distanceNear?: number;
+  distanceFar?: number;
+  fontType?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: string | number;
+  fontStyle?: string;
+  fontVariationSettings?: string;
+  fontScale?: number;
+};
+
+export type PolygonalObjectRef = object & {
+  moveObjectTo(x: number, y: number, z: number): boolean;
+  moveObjectBy(dx?: number, dy?: number, dz?: number): boolean;
+  scaleObjectTo(x?: number, y?: number, z?: number): boolean;
+  scaleObjectBy(sx?: number, sy?: number, sz?: number): boolean;
+  rotateObjectTo(x?: number, y?: number, z?: number): boolean;
+  rotateObjectBy(dx?: number, dy?: number, dz?: number): boolean;
+  setObjectColor(color: string): boolean;
+  setObjectTexture(textureUrl: string): boolean;
+  setObjectTransparency(transparency?: number): boolean;
+  setObjectReflectance(reflectance?: number): boolean;
+  setObjectCollisionMode(mode?: CollisionMode): boolean;
+  enableObjectOutline(options?: OutlineOptions): boolean;
+  disableObjectOutline(): boolean;
+  enablePhysics(options?: PhysicsOptions): boolean;
+  disablePhysics(): boolean;
+  setPhysicsVelocity(vx?: number, vy?: number, vz?: number): boolean;
+  addForce(fx?: number, fy?: number, fz?: number): boolean;
+  distanceToObject(other: string | object): number | null;
+  remove(): boolean;
+};
+
 export type SoundOptions = {
   id?: string;
   loop?: boolean;
@@ -206,11 +262,11 @@ export class PolygonalScene {
 
   onUpdate(callback: (delta: number) => void): () => void;
 
-  createBox(options?: BoxOptions): object;
-  createSphere(options?: SphereOptions): object;
-  createCylinder(options?: CylinderOptions): object;
-  createPlane(options?: PlaneOptions): object;
-  importOBJ(url: string, options?: ImportOBJOptions): Promise<object>;
+  createBox(options?: BoxOptions): PolygonalObjectRef;
+  createSphere(options?: SphereOptions): PolygonalObjectRef;
+  createCylinder(options?: CylinderOptions): PolygonalObjectRef;
+  createPlane(options?: PlaneOptions): PolygonalObjectRef;
+  importOBJ(url: string, options?: ImportOBJOptions): Promise<PolygonalObjectRef>;
 
   removeObject(target: string | object): boolean;
   getObject(target: string | object): object | null;
@@ -226,6 +282,14 @@ export class PolygonalScene {
   setObjectTransparency(target: string | object, transparency?: number): boolean;
   setObjectReflectance(target: string | object, reflectance?: number): boolean;
   setObjectCollisionMode(target: string | object, mode?: CollisionMode): boolean;
+  enableObjectOutline(target: string | object, options?: OutlineOptions): boolean;
+  disableObjectOutline(target: string | object): boolean;
+  getDistanceBetweenObjects(targetA: string | object, targetB: string | object): number | null;
+  getObjectsUnderCursor(): object[];
+  enableASCIIMode(options?: ASCIIModeOptions): boolean;
+  disableASCIIMode(): boolean;
+  setASCIIMode(options?: ASCIIModeOptions): boolean;
+  isASCIIModeEnabled(): boolean;
   enablePhysics(target: string | object, options?: PhysicsOptions): boolean;
   disablePhysics(target: string | object): boolean;
   setPhysicsVelocity(target: string | object, vx?: number, vy?: number, vz?: number): boolean;

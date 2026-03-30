@@ -79,10 +79,10 @@ scene.setCameraPosition(0, 2, 8);
 scene.lookAt(0, 0, 0);
 
 window.addEventListener("keydown", (event) => {
-	if (event.key === "ArrowRight") scene.moveObjectBy(player, 0.15, 0, 0);
-	if (event.key === "ArrowLeft") scene.moveObjectBy(player, -0.15, 0, 0);
-	if (event.key === "ArrowUp") scene.moveObjectBy(player, 0, 0, -0.15);
-	if (event.key === "ArrowDown") scene.moveObjectBy(player, 0, 0, 0.15);
+	if (event.key === "ArrowRight") player.moveObjectBy(0.15, 0, 0);
+	if (event.key === "ArrowLeft") player.moveObjectBy(-0.15, 0, 0);
+	if (event.key === "ArrowUp") player.moveObjectBy(0, 0, -0.15);
+	if (event.key === "ArrowDown") player.moveObjectBy(0, 0, 0.15);
 });
 ```
 
@@ -123,28 +123,63 @@ const tree = await scene.importOBJ("./assets/tree.obj", {
 ### Object Manipulation
 
 ```js
-scene.moveObjectTo(box, 2, 1, -3);
-scene.moveObjectBy(box, 0.1, 0, 0);
+box.moveObjectTo(2, 1, -3);
+box.moveObjectBy(0.1, 0, 0);
 
-scene.scaleObjectTo(box, 2, 2, 2);
-scene.scaleObjectBy(box, 1.1, 1, 1);
+box.scaleObjectTo(2, 2, 2);
+box.scaleObjectBy(1.1, 1, 1);
 
-scene.rotateObjectTo(box, 0, 45, 0); // degrees
-scene.rotateObjectBy(box, 0, 1, 0);  // degrees delta
+box.rotateObjectTo(0, 45, 0); // degrees
+box.rotateObjectBy(0, 1, 0);  // degrees delta
 
-scene.setObjectColor(box, "#00ff88");
-scene.setObjectTexture(box, "./assets/metal.png");
-scene.setObjectTransparency(box, 0.35);
-scene.setObjectReflectance(box, 0.8);
-scene.setObjectCollisionMode(box, "precise"); // none | simple | precise
+box.setObjectColor("#00ff88");
+box.setObjectTexture("./assets/metal.png");
+box.setObjectTransparency(0.35);
+box.setObjectReflectance(0.8);
+box.setObjectCollisionMode("precise"); // none | simple | precise
+box.enableObjectOutline({ color: "#ffffff", opacity: 0.9 });
+box.disableObjectOutline();
 
-scene.removeObject(box);
+box.remove();
+```
+
+### ASCII Rendering Mode
+
+```js
+scene.enableASCIIMode({
+	enabled: true,
+	variant: "multicolor", // "multicolor" | "monochromatic"
+	characters: [" ", ".", ":", "-", "=", "+", "*", "#", "%", "@"],
+	columnAmount: 140,
+	columns: 140, // alias for columnAmount
+	rows: 72,
+	lightWeight: 0.75,
+	distanceWeight: 0.25,
+	backgroundColor: "#050505",
+	alphaThreshold: 0.06,
+	fontType: "JetBrains Mono, Consolas, monospace",
+	fontSize: 14,
+	fontWeight: "500",
+	fontStyle: "normal",
+	fontVariationSettings: '"wght" 550',
+	colorPalette: ["#ff5555", "#f1fa8c", "#50fa7b", "#8be9fd", "#bd93f9", "#f8f8f2"]
+});
+
+scene.setASCIIMode({
+	variant: "monochromatic",
+	monochromaticDark: "#0b1220",
+	monochromaticLight: "#e5e7eb",
+	distanceNear: 2,
+	distanceFar: 120
+});
+
+scene.disableASCIIMode();
 ```
 
 ### Physics
 
 ```js
-scene.enablePhysics(player, {
+player.enablePhysics({
 	mass: 1,
 	useGravity: true,
 	bounciness: 0.25,
@@ -157,9 +192,9 @@ scene.enablePhysics(player, {
 scene.setGravity(0, -9.81, 0);
 scene.setPhysicsFloor(-1);
 
-scene.addForce(player, 5, 8, 0);
-scene.setPhysicsVelocity(player, 0, 0, 0);
-scene.disablePhysics(player);
+player.addForce(5, 8, 0);
+player.setPhysicsVelocity(0, 0, 0);
+player.disablePhysics();
 scene.clearPhysicsFloor();
 ```
 
@@ -199,11 +234,14 @@ if (scene.checkCollision(player, wall)) {
 	console.log("Collision detected");
 }
 
+const distance = player.distanceToObject(wall);
+
 if (scene.isHovering(player)) {
-	scene.setObjectColor(player, "#ffffff");
+	player.setObjectColor("#ffffff");
 }
 
 const hovered = scene.getHoveredObject();
+const allUnderCursor = scene.getObjectsUnderCursor();
 ```
 
 ### Lights
@@ -323,7 +361,8 @@ scene.clearFog();
 - Works in modern browsers and Electron renderer windows.
 - For Electron, run this from the renderer process (not the main process).
 - `rotateObjectTo`, `rotateObjectBy`, `rotateGroupBy`, and `rotateCameraTo` use degrees.
-- Create methods now return real object references; pass those variables directly into API methods.
+- Created objects expose direct helper methods (for example `object.moveObjectBy(...)`) in addition to scene-level methods.
+- `isHovering(object)` only returns true when that object is the front-most unobstructed object under the cursor.
 - `setSunTexture`, `setMoonTexture`, and `setCloudTexture` currently store references for your game systems and extensions; core lighting/color/day-night behavior is active now.
 
 ## License
