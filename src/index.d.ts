@@ -64,6 +64,29 @@ export type ImportOBJOptions = TransformOptions & MaterialOptions & {
   recolorChildren?: boolean;
 };
 
+export type PointOptions = TransformOptions & {
+  id?: string;
+  visible?: boolean;
+  pickable?: boolean;
+};
+
+export type StretchPlaneOptions = {
+  id?: string;
+  color?: string;
+  opacity?: number;
+  roughness?: number;
+  metalness?: number;
+  width?: number;
+  normal?: { x?: number; y?: number; z?: number };
+  pickable?: boolean;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+};
+
+export type SunDirectionOptions = {
+  distance?: number;
+};
+
 export type AmbientLightOptions = {
   id?: string;
   color?: string;
@@ -126,9 +149,6 @@ export type ASCIIModeOptions = {
   enabled?: boolean;
   variant?: ASCIIVariant;
   characters?: string[] | string;
-  columns?: number;
-  columnAmount?: number;
-  rows?: number;
   lightWeight?: number;
   distanceWeight?: number;
   alphaThreshold?: number;
@@ -266,6 +286,8 @@ export class PolygonalScene {
   createSphere(options?: SphereOptions): PolygonalObjectRef;
   createCylinder(options?: CylinderOptions): PolygonalObjectRef;
   createPlane(options?: PlaneOptions): PolygonalObjectRef;
+  createPoint(options?: PointOptions): PolygonalObjectRef;
+  createStretchPlane(points: Array<string | object>, options?: StretchPlaneOptions): PolygonalObjectRef | null;
   importOBJ(url: string, options?: ImportOBJOptions): Promise<PolygonalObjectRef>;
 
   removeObject(target: string | object): boolean;
@@ -356,6 +378,9 @@ export class PolygonalScene {
   getLight(target: string | object): object | null;
 
   setSkyColor(color: string): void;
+  setSunDirectionFromPoints(fromPoint: string | object, toPoint: string | object, options?: SunDirectionOptions): boolean;
+  bindSunDirectionToPoints(fromPoint: string | object, toPoint: string | object, options?: SunDirectionOptions): boolean;
+  clearSunDirectionBinding(): boolean;
   setSkyTexture(url: string, mapping?: number): void;
   setCloudTexture(url: string): void;
   setSunColor(color: string): void;

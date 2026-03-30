@@ -107,6 +107,38 @@ const box = scene.createBox({ width: 1, height: 1, depth: 1, color: "#ff6b6b" })
 const sphere = scene.createSphere({ radius: 0.5, color: "#4d96ff" });
 const cylinder = scene.createCylinder({ radiusTop: 0.5, radiusBottom: 0.5, height: 2 });
 const plane = scene.createPlane({ width: 20, height: 20, rotationX: -Math.PI / 2 });
+const pointA = scene.createPoint({ x: -4, y: 4, z: 3 });
+const pointB = scene.createPoint({ x: 0, y: 0, z: 0 });
+```
+
+### Sun Direction From Points
+
+```js
+scene.setSunDirectionFromPoints(pointA, pointB, { distance: 180 });
+
+// The system automatically uses the higher point as the source
+// and the lower point as the target the sun shines toward.
+
+// Keep sunlight direction synced while points move.
+scene.bindSunDirectionToPoints(pointA, pointB, { distance: 180 });
+scene.clearSunDirectionBinding();
+```
+
+### Stretch Plane (2+ Points)
+
+```js
+const p1 = scene.createPoint({ x: -2, y: 2, z: 0 });
+const p2 = scene.createPoint({ x: 2, y: 2, z: 0 });
+const p3 = scene.createPoint({ x: 0, y: 4, z: 0 });
+
+const cloth = scene.createStretchPlane([p1, p2, p3], {
+	color: "#93c5fd",
+	opacity: 0.75,
+	width: 0.4
+});
+
+// Move points and the stretch plane updates automatically.
+p1.moveObjectBy(0, Math.sin(performance.now() * 0.001) * 0.01, 0);
 ```
 
 ### OBJ Import
@@ -150,9 +182,6 @@ scene.enableASCIIMode({
 	enabled: true,
 	variant: "multicolor", // "multicolor" | "monochromatic"
 	characters: [" ", ".", ":", "-", "=", "+", "*", "#", "%", "@"],
-	columnAmount: 140,
-	columns: 140, // alias for columnAmount
-	rows: 72,
 	lightWeight: 0.75,
 	distanceWeight: 0.25,
 	backgroundColor: "#050505",

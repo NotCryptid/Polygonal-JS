@@ -152,6 +152,7 @@ class PolygonalScene {
     this.lights = new Map();
     this.physicsBodies = new Map();
     this.welds = new Map();
+    this.stretchPlanes = new Map();
     this.sounds = new Map();
     this.interfaces = new Map();
     this.updateCallbacks = new Set();
@@ -178,13 +179,12 @@ class PolygonalScene {
       floorY: null
     };
 
+    this.sunDirectionBinding = null;
+
     this.ascii = {
       enabled: false,
       variant: "multicolor",
-      characters: [" ", ".", ":", "-", "=", "+", "*", "#", "%", "@"],
-      columns: 120,
-      columnAmount: 120,
-      rows: 60,
+      characters: [" ", ".", "`", "'", ",", ":", ";", "-", "~", "=", "+", "*", "!", "i", "l", "I", "1", "t", "f", "L", "C", "G", "O", "0", "8", "%", "@", "#", "W", "M", "$", "B"],
       lightWeight: 0.7,
       distanceWeight: 0.3,
       alphaThreshold: 0.08,
@@ -261,6 +261,7 @@ class PolygonalScene {
     this.sunLight.position.set(40, 60, 20);
     this.sunLight.castShadow = true;
     this.scene.add(this.sunLight);
+    this.scene.add(this.sunLight.target);
     this.lights.set("sun_default", this.sunLight);
 
     this.moonLight = new THREE.DirectionalLight("#a4b7ff", 0.05);
@@ -427,6 +428,12 @@ class PolygonalScene {
     return null;
   }
 
+  _resolveObjectIds(targets = []) {
+    return targets
+      .map((target) => this._resolveObjectId(target))
+      .filter((id) => Boolean(id));
+  }
+
   _detachObjectFromWelds(objectId) {
     const weldIds = [...this.welds.keys()];
 
@@ -450,6 +457,169 @@ class PolygonalScene {
         }
       }
     }
+  }
+
+  _detachObjectFromStretchPlanes(objectId) {
+    const stretchPlaneIds = [...this.stretchPlanes.keys()];
+
+    for (const planeId of stretchPlaneIds) {
+      const descriptor = this.stretchPlanes.get(planeId);
+      if (!descriptor) {
+        continue;
+      }
+
+      if (descriptor.objectId === objectId) {
+        this.stretchPlanes.delete(planeId);
+        continue;
+      }
+
+      if (descriptor.pointIds.includes(objectId)) {
+        descriptor.pointIds = descriptor.pointIds.filter((id) => id !== objectId);
+        if (descriptor.pointIds.length < 2) {
+          this.removeObject(descriptor.objectId);
+          this.stretchPlanes.delete(planeId);
+        }
+      }
+    }
+  }
+
+  _buildStretchPlaneGeometry(points, options = {}) {
+    if (points.length < 2) {
+      return null;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+
+    if (points.length === 2) {
+      const width = options.width ?? 0.35;
+      const p0 = points[0];
+      const p1 = points[1];
+      const direction = new THREE.Vector3().subVectors(p1, p0);
+      const length = direction.length();
+      if (length < 1e-6) {
+        return null;
+      }
+
+      direction.normalize();
+      const up = options.normal
+        ? toVector3(options.normal.x ?? 0, options.normal.y ?? 1, options.normal.z ?? 0).normalize()
+        : new THREE.Vector3(0, 1, 0);
+
+      if (Math.abs(direction.dot(up)) > 0.98) {
+        up.set(1, 0, 0);
+      }
+
+      const side = new THREE.Vector3().crossVectors(direction, up).normalize().multiplyScalar(width / 2);
+      const vertices = [
+        p0.clone().add(side),
+        p0.clone().sub(side),
+        p1.clone().sub(side),
+        p1.clone().add(side)
+      ];
+
+      const flat = new Float32Array(vertices.flatMap((v) => [v.x, v.y, v.z]));
+      geometry.setAttribute("position", new THREE.BufferAttribute(flat, 3));
+      geometry.setIndex([0, 1, 2, 0, 2, 3]);
+      geometry.computeVertexNormals();
+      return geometry;
+    }
+
+    const centroid = points.reduce((acc, point) => acc.add(point.clone()), new THREE.Vector3()).multiplyScalar(1 / points.length);
+    let normal = null;
+
+    for (let i = 2; i < points.length; i += 1) {
+      const a = new THREE.Vector3().subVectors(points[1], points[0]);
+      const b = new THREE.Vector3().subVectors(points[i], points[0]);
+      const n = new THREE.Vector3().crossVectors(a, b);
+      if (n.lengthSq() > 1e-8) {
+        normal = n.normalize();
+        break;
+      }
+    }
+
+    if (!normal) {
+      normal = new THREE.Vector3(0, 1, 0);
+    }
+
+    let u = new THREE.Vector3().subVectors(points[0], centroid);
+    if (u.lengthSq() < 1e-8) {
+      u = new THREE.Vector3(1, 0, 0);
+    }
+    u.normalize();
+    const v = new THREE.Vector3().crossVectors(normal, u).normalize();
+
+    const sorted = [...points].sort((left, right) => {
+      const l = new THREE.Vector3().subVectors(left, centroid);
+      const r = new THREE.Vector3().subVectors(right, centroid);
+      const lAngle = Math.atan2(l.dot(v), l.dot(u));
+      const rAngle = Math.atan2(r.dot(v), r.dot(u));
+      return lAngle - rAngle;
+    });
+
+    const flat = new Float32Array(sorted.flatMap((point) => [point.x, point.y, point.z]));
+    geometry.setAttribute("position", new THREE.BufferAttribute(flat, 3));
+
+    const indices = [];
+    for (let i = 1; i < sorted.length - 1; i += 1) {
+      indices.push(0, i, i + 1);
+    }
+
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
+  _updateStretchPlanes() {
+    if (this.stretchPlanes.size === 0) {
+      return;
+    }
+
+    for (const [planeId, descriptor] of this.stretchPlanes.entries()) {
+      const planeObject = this.objects.get(descriptor.objectId);
+      if (!planeObject) {
+        this.stretchPlanes.delete(planeId);
+        continue;
+      }
+
+      const points = descriptor.pointIds
+        .map((id) => this.objects.get(id))
+        .filter((entry) => Boolean(entry))
+        .map((entry) => {
+          const worldPosition = new THREE.Vector3();
+          entry.getWorldPosition(worldPosition);
+          return worldPosition;
+        });
+
+      if (points.length < 2) {
+        continue;
+      }
+
+      const geometry = this._buildStretchPlaneGeometry(points, descriptor.options);
+      if (!geometry) {
+        continue;
+      }
+
+      const mesh = planeObject;
+      if (mesh.geometry) {
+        mesh.geometry.dispose();
+      }
+      mesh.geometry = geometry;
+      mesh.position.set(0, 0, 0);
+      mesh.rotation.set(0, 0, 0);
+      mesh.scale.set(1, 1, 1);
+    }
+  }
+
+  _updateSunDirectionBinding() {
+    if (!this.sunDirectionBinding) {
+      return;
+    }
+
+    this.setSunDirectionFromPoints(
+      this.sunDirectionBinding.from,
+      this.sunDirectionBinding.to,
+      this.sunDirectionBinding.options
+    );
   }
 
   _projectWorldToScreen(position) {
@@ -596,8 +766,10 @@ class PolygonalScene {
       return;
     }
 
-    const cols = Math.max(8, Math.floor(this.ascii.columnAmount ?? this.ascii.columns));
-    const rows = Math.max(6, Math.floor(this.ascii.rows));
+    const fontPx = this.ascii.fontSize ?? Math.max(8, Math.min(18, height / 36));
+    const estimatedCharWidth = Math.max(4, fontPx * 0.6);
+    const cols = Math.max(8, Math.floor(width / estimatedCharWidth));
+    const rows = Math.max(6, Math.floor(height / Math.max(8, fontPx)));
 
     this._asciiCanvas.width = cols;
     this._asciiCanvas.height = rows;
@@ -619,9 +791,9 @@ class PolygonalScene {
 
     overlay.textAlign = "center";
     overlay.textBaseline = "middle";
-    const fontPx = this.ascii.fontSize ?? Math.max(8, cellHeight * this.ascii.fontScale);
+    const computedFontPx = this.ascii.fontSize ?? Math.max(8, cellHeight * this.ascii.fontScale);
     const fontFamily = this.ascii.fontType ?? this.ascii.fontFamily;
-    overlay.font = `${this.ascii.fontStyle} ${this.ascii.fontWeight} ${fontPx}px ${fontFamily}`;
+    overlay.font = `${this.ascii.fontStyle} ${this.ascii.fontWeight} ${computedFontPx}px ${fontFamily}`;
     this._asciiOverlay.style.fontVariationSettings = this.ascii.fontVariationSettings;
 
     const charSet = this.ascii.characters.length > 0 ? this.ascii.characters : [" ", "#", "@"]; 
@@ -849,6 +1021,8 @@ class PolygonalScene {
 
       this._stepPhysics(delta);
       this._updateWelds();
+      this._updateStretchPlanes();
+      this._updateSunDirectionBinding();
       this._updateInterfaces();
       this._updateSounds();
       this._updateHoverState();
@@ -883,12 +1057,14 @@ class PolygonalScene {
     this.lights.clear();
     this.physicsBodies.clear();
     this.welds.clear();
+    this.stretchPlanes.clear();
     this.sounds.forEach((sound) => this._cleanupSound(sound));
     this.sounds.clear();
     this.interfaces.forEach((iface) => this._cleanupInterface(iface));
     this.interfaces.clear();
     this.meshesForPicking.length = 0;
     this.updateCallbacks.clear();
+    this.sunDirectionBinding = null;
 
     if (this.interfaceLayer?.parentElement) {
       this.interfaceLayer.parentElement.removeChild(this.interfaceLayer);
@@ -959,6 +1135,48 @@ class PolygonalScene {
     return this._registerObject(mesh, options.id);
   }
 
+  createPoint(options = {}) {
+    const point = new THREE.Object3D();
+    point.visible = options.visible ?? false;
+    applyTransform(point, options);
+    return this._registerObject(point, options.id, options.pickable ?? false);
+  }
+
+  createStretchPlane(points = [], options = {}) {
+    const pointIds = this._resolveObjectIds(points);
+    if (pointIds.length < 2) {
+      return null;
+    }
+
+    const material = new THREE.MeshStandardMaterial({
+      color: toThreeColor(options.color ?? this.defaultObjectColor),
+      side: THREE.DoubleSide,
+      transparent: (options.opacity ?? 1) < 1,
+      opacity: clamp(options.opacity ?? 1, 0, 1),
+      roughness: options.roughness ?? 0.85,
+      metalness: options.metalness ?? 0.05
+    });
+
+    const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
+    mesh.castShadow = options.castShadow ?? false;
+    mesh.receiveShadow = options.receiveShadow ?? true;
+    const registered = this._registerObject(mesh, options.id, options.pickable ?? true);
+
+    const descriptorId = registered.userData.polygonalId;
+    this.stretchPlanes.set(descriptorId, {
+      id: descriptorId,
+      objectId: descriptorId,
+      pointIds,
+      options: {
+        width: options.width ?? 0.35,
+        normal: options.normal
+      }
+    });
+
+    this._updateStretchPlanes();
+    return registered;
+  }
+
   async importOBJ(url, options = {}) {
     const object = await this.objLoader.loadAsync(url);
 
@@ -988,6 +1206,7 @@ class PolygonalScene {
     this.objects.delete(object.userData.polygonalId);
     this.physicsBodies.delete(object.userData.polygonalId);
     this._detachObjectFromWelds(object.userData.polygonalId);
+    this._detachObjectFromStretchPlanes(object.userData.polygonalId);
     this.interfaces.forEach((iface) => {
       const targetId = this._resolveObjectId(iface.target);
       if (targetId && targetId === object.userData.polygonalId) {
@@ -1246,9 +1465,6 @@ class PolygonalScene {
   setASCIIMode(options = {}) {
     this.ascii.enabled = options.enabled ?? this.ascii.enabled;
     this.ascii.variant = options.variant ?? this.ascii.variant;
-    this.ascii.columns = options.columns ?? this.ascii.columns;
-    this.ascii.columnAmount = options.columnAmount ?? options.columns ?? this.ascii.columnAmount;
-    this.ascii.rows = options.rows ?? this.ascii.rows;
     this.ascii.lightWeight = options.lightWeight ?? this.ascii.lightWeight;
     this.ascii.distanceWeight = options.distanceWeight ?? this.ascii.distanceWeight;
     this.ascii.alphaThreshold = options.alphaThreshold ?? this.ascii.alphaThreshold;
@@ -2071,6 +2287,56 @@ class PolygonalScene {
 
   setSkyColor(color) {
     this.scene.background = toThreeColor(color);
+  }
+
+  setSunDirectionFromPoints(fromPoint, toPoint, options = {}) {
+    const from = this._resolveObject(fromPoint);
+    const to = this._resolveObject(toPoint);
+
+    if (!from || !to) {
+      return false;
+    }
+
+    const first = new THREE.Vector3();
+    const second = new THREE.Vector3();
+    from.getWorldPosition(first);
+    to.getWorldPosition(second);
+
+    const source = first.y >= second.y ? first : second;
+    const target = first.y >= second.y ? second : first;
+
+    const direction = new THREE.Vector3().subVectors(target, source);
+    if (direction.lengthSq() < 1e-8) {
+      return false;
+    }
+
+    direction.normalize();
+    const distance = options.distance ?? source.distanceTo(target);
+    const lightPosition = target.clone().sub(direction.multiplyScalar(distance));
+
+    this.sunLight.position.copy(lightPosition);
+    this.sunLight.target.position.copy(target);
+    this.sunLight.target.updateMatrixWorld();
+    return true;
+  }
+
+  bindSunDirectionToPoints(fromPoint, toPoint, options = {}) {
+    if (!this.setSunDirectionFromPoints(fromPoint, toPoint, options)) {
+      return false;
+    }
+
+    this.sunDirectionBinding = {
+      from: fromPoint,
+      to: toPoint,
+      options: { ...options }
+    };
+
+    return true;
+  }
+
+  clearSunDirectionBinding() {
+    this.sunDirectionBinding = null;
+    return true;
   }
 
   setSkyTexture(url, mapping = THREE.EquirectangularReflectionMapping) {
