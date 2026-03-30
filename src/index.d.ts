@@ -155,6 +155,7 @@ export type ASCIIModeOptions = {
   backgroundColor?: string;
   monochromaticDark?: string;
   monochromaticLight?: string;
+  monochromaticCurve?: number;
   colorPalette?: string[] | null;
   distanceNear?: number;
   distanceFar?: number;
@@ -165,6 +166,9 @@ export type ASCIIModeOptions = {
   fontStyle?: string;
   fontVariationSettings?: string;
   fontScale?: number;
+  contrast?: number;
+  gamma?: number;
+  colorBrightnessMix?: number;
 };
 
 export type PolygonalObjectRef = object & {

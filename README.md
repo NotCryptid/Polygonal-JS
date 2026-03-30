@@ -181,9 +181,12 @@ box.remove();
 scene.enableASCIIMode({
 	enabled: true,
 	variant: "multicolor", // "multicolor" | "monochromatic"
-	characters: [" ", ".", ":", "-", "=", "+", "*", "#", "%", "@"],
+	characters: [" ", ".", ",", ":", "-", "=", "+", "*", "#", "%", "@"],
 	lightWeight: 0.75,
 	distanceWeight: 0.25,
+	contrast: 1.2,
+	gamma: 0.9,
+	colorBrightnessMix: 0.75,
 	backgroundColor: "#050505",
 	alphaThreshold: 0.06,
 	fontType: "JetBrains Mono, Consolas, monospace",
@@ -198,6 +201,7 @@ scene.setASCIIMode({
 	variant: "monochromatic",
 	monochromaticDark: "#0b1220",
 	monochromaticLight: "#e5e7eb",
+	monochromaticCurve: 1.15,
 	distanceNear: 2,
 	distanceFar: 120
 });

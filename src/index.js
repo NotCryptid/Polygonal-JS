@@ -184,23 +184,27 @@ class PolygonalScene {
     this.ascii = {
       enabled: false,
       variant: "multicolor",
-      characters: [" ", ".", "`", "'", ",", ":", ";", "-", "~", "=", "+", "*", "!", "i", "l", "I", "1", "t", "f", "L", "C", "G", "O", "0", "8", "%", "@", "#", "W", "M", "$", "B"],
+      characters: [" ", ".", ",", ":", "-", "=", "+", "*", "#", "%", "@"],
       lightWeight: 0.7,
       distanceWeight: 0.3,
       alphaThreshold: 0.08,
       backgroundColor: "#000000",
       monochromaticDark: "#1f2937",
       monochromaticLight: "#f9fafb",
+      monochromaticCurve: 1.15,
       colorPalette: null,
       distanceNear: 0,
       distanceFar: 120,
       fontType: "Consolas, 'Courier New', monospace",
       fontFamily: "Consolas, 'Courier New', monospace",
-      fontSize: null,
+      fontSize: 12,
       fontWeight: "400",
       fontStyle: "normal",
       fontVariationSettings: "normal",
-      fontScale: 0.95
+      fontScale: 1,
+      contrast: 1.2,
+      gamma: 0.9,
+      colorBrightnessMix: 0.75
     };
 
     this._asciiPalette = null;
@@ -796,7 +800,7 @@ class PolygonalScene {
     overlay.font = `${this.ascii.fontStyle} ${this.ascii.fontWeight} ${computedFontPx}px ${fontFamily}`;
     this._asciiOverlay.style.fontVariationSettings = this.ascii.fontVariationSettings;
 
-    const charSet = this.ascii.characters.length > 0 ? this.ascii.characters : [" ", "#", "@"]; 
+    const charSet = this.ascii.characters.length > 0 ? this.ascii.characters : [" ", ".", ":", "#", "@"]; 
     const monoDark = colorToRgb(this.ascii.monochromaticDark);
     const monoLight = colorToRgb(this.ascii.monochromaticLight);
     const weightSum = Math.max(0.0001, this.ascii.lightWeight + this.ascii.distanceWeight);
@@ -830,11 +834,14 @@ class PolygonalScene {
           }
         }
 
-        const brightness = clamp(
+        let brightness = clamp(
           (luminance * this.ascii.lightWeight + distanceFactor * this.ascii.distanceWeight) / weightSum,
           0,
           1
         );
+
+        brightness = clamp(Math.pow(brightness, this.ascii.gamma), 0, 1);
+        brightness = clamp((brightness - 0.5) * this.ascii.contrast + 0.5, 0, 1);
 
         const charIndex = Math.round(brightness * (charSet.length - 1));
         const char = charSet[charIndex] ?? " ";
@@ -843,14 +850,22 @@ class PolygonalScene {
         }
 
         if (this.ascii.variant === "monochromatic") {
-          const monoColor = lerpColor(monoDark, monoLight, brightness);
+          const gradientT = clamp(Math.pow(brightness, this.ascii.monochromaticCurve), 0, 1);
+          const monoColor = lerpColor(monoDark, monoLight, gradientT);
           overlay.fillStyle = rgbToCss(monoColor);
         } else {
           let color = { r, g, b };
           if (this._asciiPalette && this._asciiPalette.length > 0) {
             color = nearestPaletteColor(color, this._asciiPalette);
           }
-          overlay.fillStyle = rgbToCss(color);
+
+          const colorMix = clamp(this.ascii.colorBrightnessMix, 0, 1);
+          const toned = lerpColor(
+            { r: 0, g: 0, b: 0 },
+            color,
+            Math.max(0.15, brightness * colorMix)
+          );
+          overlay.fillStyle = rgbToCss(toned);
         }
 
         overlay.globalAlpha = alpha;
@@ -1471,6 +1486,7 @@ class PolygonalScene {
     this.ascii.backgroundColor = options.backgroundColor ?? this.ascii.backgroundColor;
     this.ascii.monochromaticDark = options.monochromaticDark ?? this.ascii.monochromaticDark;
     this.ascii.monochromaticLight = options.monochromaticLight ?? this.ascii.monochromaticLight;
+    this.ascii.monochromaticCurve = options.monochromaticCurve ?? this.ascii.monochromaticCurve;
     this.ascii.distanceNear = options.distanceNear ?? this.ascii.distanceNear;
     this.ascii.distanceFar = options.distanceFar ?? this.ascii.distanceFar;
     this.ascii.fontType = options.fontType ?? options.fontFamily ?? this.ascii.fontType;
@@ -1480,6 +1496,9 @@ class PolygonalScene {
     this.ascii.fontStyle = options.fontStyle ?? this.ascii.fontStyle;
     this.ascii.fontVariationSettings = options.fontVariationSettings ?? this.ascii.fontVariationSettings;
     this.ascii.fontScale = options.fontScale ?? this.ascii.fontScale;
+    this.ascii.contrast = options.contrast ?? this.ascii.contrast;
+    this.ascii.gamma = options.gamma ?? this.ascii.gamma;
+    this.ascii.colorBrightnessMix = options.colorBrightnessMix ?? this.ascii.colorBrightnessMix;
 
     if (options.characters) {
       this.ascii.characters = Array.isArray(options.characters)
