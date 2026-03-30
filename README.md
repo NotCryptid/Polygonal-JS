@@ -107,38 +107,13 @@ const box = scene.createBox({ width: 1, height: 1, depth: 1, color: "#ff6b6b" })
 const sphere = scene.createSphere({ radius: 0.5, color: "#4d96ff" });
 const cylinder = scene.createCylinder({ radiusTop: 0.5, radiusBottom: 0.5, height: 2 });
 const plane = scene.createPlane({ width: 20, height: 20, rotationX: -Math.PI / 2 });
-const pointA = scene.createPoint({ x: -4, y: 4, z: 3 });
-const pointB = scene.createPoint({ x: 0, y: 0, z: 0 });
-```
-
-### Sun Direction From Points
-
-```js
-scene.setSunDirectionFromPoints(pointA, pointB, { distance: 180 });
-
-// The system automatically uses the higher point as the source
-// and the lower point as the target the sun shines toward.
-
-// Keep sunlight direction synced while points move.
-scene.bindSunDirectionToPoints(pointA, pointB, { distance: 180 });
-scene.clearSunDirectionBinding();
-```
-
-### Stretch Plane (2+ Points)
-
-```js
-const p1 = scene.createPoint({ x: -2, y: 2, z: 0 });
-const p2 = scene.createPoint({ x: 2, y: 2, z: 0 });
-const p3 = scene.createPoint({ x: 0, y: 4, z: 0 });
-
-const cloth = scene.createStretchPlane([p1, p2, p3], {
-	color: "#93c5fd",
-	opacity: 0.75,
-	width: 0.4
+const pointA = scene.createPoint({ x: -2, y: 1, z: 0 });
+const pointB = scene.createPoint({ x: 2, y: 1, z: 0 });
+const stretch = scene.createStretchPlane([pointA, pointB], {
+	color: "#88c0ff",
+	opacity: 0.6,
+	width: 0.5
 });
-
-// Move points and the stretch plane updates automatically.
-p1.moveObjectBy(0, Math.sin(performance.now() * 0.001) * 0.01, 0);
 ```
 
 ### OBJ Import
@@ -173,40 +148,6 @@ box.enableObjectOutline({ color: "#ffffff", opacity: 0.9 });
 box.disableObjectOutline();
 
 box.remove();
-```
-
-### ASCII Rendering Mode
-
-```js
-scene.enableASCIIMode({
-	enabled: true,
-	variant: "multicolor", // "multicolor" | "monochromatic"
-	characters: [" ", ".", ",", ":", "-", "=", "+", "*", "#", "%", "@"],
-	lightWeight: 0.75,
-	distanceWeight: 0.25,
-	contrast: 1.2,
-	gamma: 0.9,
-	colorBrightnessMix: 0.75,
-	backgroundColor: "#050505",
-	alphaThreshold: 0.06,
-	fontType: "JetBrains Mono, Consolas, monospace",
-	fontSize: 14,
-	fontWeight: "500",
-	fontStyle: "normal",
-	fontVariationSettings: '"wght" 550',
-	colorPalette: ["#ff5555", "#f1fa8c", "#50fa7b", "#8be9fd", "#bd93f9", "#f8f8f2"]
-});
-
-scene.setASCIIMode({
-	variant: "monochromatic",
-	monochromaticDark: "#0b1220",
-	monochromaticLight: "#e5e7eb",
-	monochromaticCurve: 1.15,
-	distanceNear: 2,
-	distanceFar: 120
-});
-
-scene.disableASCIIMode();
 ```
 
 ### Physics
@@ -376,6 +317,10 @@ scene.removeInterface("doorBadge");
 ```js
 scene.setSkyColor("#87ceeb");
 scene.setSkyTexture("./assets/sky.png");
+
+scene.setSunDirectionFromPoints(playerHead, targetMarker, { distance: 120 });
+scene.bindSunDirectionToPoints(playerHead, targetMarker, { distance: 120 });
+scene.clearSunDirectionBinding();
 
 scene.setSunColor("#ffeab3");
 scene.setMoonColor("#b7c8ff");

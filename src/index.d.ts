@@ -143,34 +143,6 @@ export type OutlineOptions = {
   thresholdAngle?: number;
 };
 
-export type ASCIIVariant = "multicolor" | "monochromatic";
-
-export type ASCIIModeOptions = {
-  enabled?: boolean;
-  variant?: ASCIIVariant;
-  characters?: string[] | string;
-  lightWeight?: number;
-  distanceWeight?: number;
-  alphaThreshold?: number;
-  backgroundColor?: string;
-  monochromaticDark?: string;
-  monochromaticLight?: string;
-  monochromaticCurve?: number;
-  colorPalette?: string[] | null;
-  distanceNear?: number;
-  distanceFar?: number;
-  fontType?: string;
-  fontFamily?: string;
-  fontSize?: number;
-  fontWeight?: string | number;
-  fontStyle?: string;
-  fontVariationSettings?: string;
-  fontScale?: number;
-  contrast?: number;
-  gamma?: number;
-  colorBrightnessMix?: number;
-};
-
 export type PolygonalObjectRef = object & {
   moveObjectTo(x: number, y: number, z: number): boolean;
   moveObjectBy(dx?: number, dy?: number, dz?: number): boolean;
@@ -312,10 +284,6 @@ export class PolygonalScene {
   disableObjectOutline(target: string | object): boolean;
   getDistanceBetweenObjects(targetA: string | object, targetB: string | object): number | null;
   getObjectsUnderCursor(): object[];
-  enableASCIIMode(options?: ASCIIModeOptions): boolean;
-  disableASCIIMode(): boolean;
-  setASCIIMode(options?: ASCIIModeOptions): boolean;
-  isASCIIModeEnabled(): boolean;
   enablePhysics(target: string | object, options?: PhysicsOptions): boolean;
   disablePhysics(target: string | object): boolean;
   setPhysicsVelocity(target: string | object, vx?: number, vy?: number, vz?: number): boolean;

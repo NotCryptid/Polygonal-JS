@@ -24,50 +24,6 @@ function degToRad(value) {
   return (value * Math.PI) / 180;
 }
 
-function colorToRgb(colorValue, fallback = "#ffffff") {
-  const color = new THREE.Color(colorValue ?? fallback);
-  return {
-    r: Math.round(color.r * 255),
-    g: Math.round(color.g * 255),
-    b: Math.round(color.b * 255)
-  };
-}
-
-function rgbToCss({ r, g, b }) {
-  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
-}
-
-function lerpColor(a, b, t) {
-  return {
-    r: a.r + (b.r - a.r) * t,
-    g: a.g + (b.g - a.g) * t,
-    b: a.b + (b.b - a.b) * t
-  };
-}
-
-function nearestPaletteColor(color, palette) {
-  if (!palette || palette.length === 0) {
-    return color;
-  }
-
-  let best = palette[0];
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  for (const candidate of palette) {
-    const dr = color.r - candidate.r;
-    const dg = color.g - candidate.g;
-    const db = color.b - candidate.b;
-    const distance = dr * dr + dg * dg + db * db;
-
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = candidate;
-    }
-  }
-
-  return best;
-}
-
 function normalizeCollisionMode(mode) {
   if (mode === "none" || mode === "simple" || mode === "precise") {
     return mode;
@@ -178,39 +134,7 @@ class PolygonalScene {
       gravity: new THREE.Vector3(0, -9.81, 0),
       floorY: null
     };
-
     this.sunDirectionBinding = null;
-
-    this.ascii = {
-      enabled: false,
-      variant: "multicolor",
-      characters: [" ", ".", ",", ":", "-", "=", "+", "*", "#", "%", "@"],
-      lightWeight: 0.7,
-      distanceWeight: 0.3,
-      alphaThreshold: 0.08,
-      backgroundColor: "#000000",
-      monochromaticDark: "#1f2937",
-      monochromaticLight: "#f9fafb",
-      monochromaticCurve: 1.15,
-      colorPalette: null,
-      distanceNear: 0,
-      distanceFar: 120,
-      fontType: "Consolas, 'Courier New', monospace",
-      fontFamily: "Consolas, 'Courier New', monospace",
-      fontSize: 12,
-      fontWeight: "400",
-      fontStyle: "normal",
-      fontVariationSettings: "normal",
-      fontScale: 1,
-      contrast: 1.2,
-      gamma: 0.9,
-      colorBrightnessMix: 0.75
-    };
-
-    this._asciiPalette = null;
-    this._asciiCanvas = document.createElement("canvas");
-    this._asciiContext = this._asciiCanvas.getContext("2d", { willReadFrequently: true });
-    this._asciiOverlay = null;
 
     this._setupContainer();
     this._setupBaseLights();
@@ -725,157 +649,6 @@ class PolygonalScene {
     iface.element.remove();
   }
 
-  _ensureAsciiOverlay() {
-    if (this._asciiOverlay) {
-      return;
-    }
-
-    const overlay = document.createElement("canvas");
-    overlay.style.position = "absolute";
-    overlay.style.left = "0";
-    overlay.style.top = "0";
-    overlay.style.width = "100%";
-    overlay.style.height = "100%";
-    overlay.style.pointerEvents = "none";
-    overlay.style.zIndex = "2";
-
-    this.container.appendChild(overlay);
-    this._asciiOverlay = overlay;
-    this._asciiOverlayContext = overlay.getContext("2d");
-  }
-
-  _destroyAsciiOverlay() {
-    if (!this._asciiOverlay) {
-      return;
-    }
-
-    if (this._asciiOverlay.parentElement) {
-      this._asciiOverlay.parentElement.removeChild(this._asciiOverlay);
-    }
-
-    this._asciiOverlay = null;
-    this._asciiOverlayContext = null;
-  }
-
-  _renderAsciiFrame() {
-    if (!this.ascii.enabled || !this._asciiContext) {
-      return;
-    }
-
-    this._ensureAsciiOverlay();
-
-    const width = this.renderer.domElement.clientWidth;
-    const height = this.renderer.domElement.clientHeight;
-    if (!width || !height || !this._asciiOverlayContext) {
-      return;
-    }
-
-    const fontPx = this.ascii.fontSize ?? Math.max(8, Math.min(18, height / 36));
-    const estimatedCharWidth = Math.max(4, fontPx * 0.6);
-    const cols = Math.max(8, Math.floor(width / estimatedCharWidth));
-    const rows = Math.max(6, Math.floor(height / Math.max(8, fontPx)));
-
-    this._asciiCanvas.width = cols;
-    this._asciiCanvas.height = rows;
-    this._asciiContext.drawImage(this.renderer.domElement, 0, 0, cols, rows);
-
-    const imageData = this._asciiContext.getImageData(0, 0, cols, rows);
-    const data = imageData.data;
-
-    this._asciiOverlay.width = width;
-    this._asciiOverlay.height = height;
-
-    const overlay = this._asciiOverlayContext;
-    const cellWidth = width / cols;
-    const cellHeight = height / rows;
-
-    overlay.clearRect(0, 0, width, height);
-    overlay.fillStyle = this.ascii.backgroundColor;
-    overlay.fillRect(0, 0, width, height);
-
-    overlay.textAlign = "center";
-    overlay.textBaseline = "middle";
-    const computedFontPx = this.ascii.fontSize ?? Math.max(8, cellHeight * this.ascii.fontScale);
-    const fontFamily = this.ascii.fontType ?? this.ascii.fontFamily;
-    overlay.font = `${this.ascii.fontStyle} ${this.ascii.fontWeight} ${computedFontPx}px ${fontFamily}`;
-    this._asciiOverlay.style.fontVariationSettings = this.ascii.fontVariationSettings;
-
-    const charSet = this.ascii.characters.length > 0 ? this.ascii.characters : [" ", ".", ":", "#", "@"]; 
-    const monoDark = colorToRgb(this.ascii.monochromaticDark);
-    const monoLight = colorToRgb(this.ascii.monochromaticLight);
-    const weightSum = Math.max(0.0001, this.ascii.lightWeight + this.ascii.distanceWeight);
-
-    for (let y = 0; y < rows; y += 1) {
-      for (let x = 0; x < cols; x += 1) {
-        const i = (y * cols + x) * 4;
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const alpha = data[i + 3] / 255;
-
-        if (alpha < this.ascii.alphaThreshold) {
-          continue;
-        }
-
-        const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-
-        let distanceFactor = 1;
-        if (this.ascii.distanceWeight > 0) {
-          const nx = ((x + 0.5) / cols) * 2 - 1;
-          const ny = -(((y + 0.5) / rows) * 2 - 1);
-          this.raycaster.setFromCamera({ x: nx, y: ny }, this.camera);
-          const hits = this.raycaster.intersectObjects(this.meshesForPicking, true);
-
-          if (hits.length > 0) {
-            const distance = hits[0].distance;
-            const near = this.ascii.distanceNear;
-            const far = Math.max(near + 0.001, this.ascii.distanceFar);
-            distanceFactor = 1 - clamp((distance - near) / (far - near), 0, 1);
-          }
-        }
-
-        let brightness = clamp(
-          (luminance * this.ascii.lightWeight + distanceFactor * this.ascii.distanceWeight) / weightSum,
-          0,
-          1
-        );
-
-        brightness = clamp(Math.pow(brightness, this.ascii.gamma), 0, 1);
-        brightness = clamp((brightness - 0.5) * this.ascii.contrast + 0.5, 0, 1);
-
-        const charIndex = Math.round(brightness * (charSet.length - 1));
-        const char = charSet[charIndex] ?? " ";
-        if (char === " ") {
-          continue;
-        }
-
-        if (this.ascii.variant === "monochromatic") {
-          const gradientT = clamp(Math.pow(brightness, this.ascii.monochromaticCurve), 0, 1);
-          const monoColor = lerpColor(monoDark, monoLight, gradientT);
-          overlay.fillStyle = rgbToCss(monoColor);
-        } else {
-          let color = { r, g, b };
-          if (this._asciiPalette && this._asciiPalette.length > 0) {
-            color = nearestPaletteColor(color, this._asciiPalette);
-          }
-
-          const colorMix = clamp(this.ascii.colorBrightnessMix, 0, 1);
-          const toned = lerpColor(
-            { r: 0, g: 0, b: 0 },
-            color,
-            Math.max(0.15, brightness * colorMix)
-          );
-          overlay.fillStyle = rgbToCss(toned);
-        }
-
-        overlay.globalAlpha = alpha;
-        overlay.fillText(char, (x + 0.5) * cellWidth, (y + 0.5) * cellHeight);
-      }
-    }
-
-    overlay.globalAlpha = 1;
-  }
-
   _getCollisionMode(object) {
     return normalizeCollisionMode(object?.userData?.collisionMode);
   }
@@ -1044,7 +817,6 @@ class PolygonalScene {
       this.updateCallbacks.forEach((callback) => callback(delta));
 
       this.renderer.render(this.scene, this.camera);
-      this._renderAsciiFrame();
       this._raf = window.requestAnimationFrame(tick);
     };
 
@@ -1084,8 +856,6 @@ class PolygonalScene {
     if (this.interfaceLayer?.parentElement) {
       this.interfaceLayer.parentElement.removeChild(this.interfaceLayer);
     }
-
-    this._destroyAsciiOverlay();
   }
 
   onUpdate(callback) {
@@ -1465,64 +1235,6 @@ class PolygonalScene {
 
   getObjectsUnderCursor() {
     return [...this._hoveredObjects];
-  }
-
-  enableASCIIMode(options = {}) {
-    return this.setASCIIMode({ ...options, enabled: true });
-  }
-
-  disableASCIIMode() {
-    this.ascii.enabled = false;
-    this._destroyAsciiOverlay();
-    return true;
-  }
-
-  setASCIIMode(options = {}) {
-    this.ascii.enabled = options.enabled ?? this.ascii.enabled;
-    this.ascii.variant = options.variant ?? this.ascii.variant;
-    this.ascii.lightWeight = options.lightWeight ?? this.ascii.lightWeight;
-    this.ascii.distanceWeight = options.distanceWeight ?? this.ascii.distanceWeight;
-    this.ascii.alphaThreshold = options.alphaThreshold ?? this.ascii.alphaThreshold;
-    this.ascii.backgroundColor = options.backgroundColor ?? this.ascii.backgroundColor;
-    this.ascii.monochromaticDark = options.monochromaticDark ?? this.ascii.monochromaticDark;
-    this.ascii.monochromaticLight = options.monochromaticLight ?? this.ascii.monochromaticLight;
-    this.ascii.monochromaticCurve = options.monochromaticCurve ?? this.ascii.monochromaticCurve;
-    this.ascii.distanceNear = options.distanceNear ?? this.ascii.distanceNear;
-    this.ascii.distanceFar = options.distanceFar ?? this.ascii.distanceFar;
-    this.ascii.fontType = options.fontType ?? options.fontFamily ?? this.ascii.fontType;
-    this.ascii.fontFamily = options.fontFamily ?? this.ascii.fontFamily;
-    this.ascii.fontSize = options.fontSize ?? this.ascii.fontSize;
-    this.ascii.fontWeight = options.fontWeight ?? this.ascii.fontWeight;
-    this.ascii.fontStyle = options.fontStyle ?? this.ascii.fontStyle;
-    this.ascii.fontVariationSettings = options.fontVariationSettings ?? this.ascii.fontVariationSettings;
-    this.ascii.fontScale = options.fontScale ?? this.ascii.fontScale;
-    this.ascii.contrast = options.contrast ?? this.ascii.contrast;
-    this.ascii.gamma = options.gamma ?? this.ascii.gamma;
-    this.ascii.colorBrightnessMix = options.colorBrightnessMix ?? this.ascii.colorBrightnessMix;
-
-    if (options.characters) {
-      this.ascii.characters = Array.isArray(options.characters)
-        ? options.characters.map((entry) => String(entry))
-        : String(options.characters).split("");
-    }
-
-    if (options.colorPalette) {
-      this.ascii.colorPalette = options.colorPalette;
-      this._asciiPalette = options.colorPalette.map((entry) => colorToRgb(entry));
-    } else if (options.colorPalette === null) {
-      this.ascii.colorPalette = null;
-      this._asciiPalette = null;
-    }
-
-    if (!this.ascii.enabled) {
-      this._destroyAsciiOverlay();
-    }
-
-    return true;
-  }
-
-  isASCIIModeEnabled() {
-    return this.ascii.enabled;
   }
 
   getObject(target) {
@@ -2304,10 +2016,6 @@ class PolygonalScene {
     return this._resolveLight(target);
   }
 
-  setSkyColor(color) {
-    this.scene.background = toThreeColor(color);
-  }
-
   setSunDirectionFromPoints(fromPoint, toPoint, options = {}) {
     const from = this._resolveObject(fromPoint);
     const to = this._resolveObject(toPoint);
@@ -2356,6 +2064,10 @@ class PolygonalScene {
   clearSunDirectionBinding() {
     this.sunDirectionBinding = null;
     return true;
+  }
+
+  setSkyColor(color) {
+    this.scene.background = toThreeColor(color);
   }
 
   setSkyTexture(url, mapping = THREE.EquirectangularReflectionMapping) {
