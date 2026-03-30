@@ -16,6 +16,21 @@ function toVector3(x = 0, y = 0, z = 0) {
   return new THREE.Vector3(x, y, z);
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function degToRad(value) {
+  return (value * Math.PI) / 180;
+}
+
+function normalizeCollisionMode(mode) {
+  if (mode === "none" || mode === "simple" || mode === "precise") {
+    return mode;
+  }
+  return "simple";
+}
+
 function applyTransform(target, options = {}) {
   const {
     x,
@@ -93,6 +108,8 @@ class PolygonalScene {
     this.lights = new Map();
     this.physicsBodies = new Map();
     this.welds = new Map();
+    this.sounds = new Map();
+    this.interfaces = new Map();
     this.updateCallbacks = new Set();
     this.meshesForPicking = [];
 
@@ -118,6 +135,7 @@ class PolygonalScene {
 
     this._setupContainer();
     this._setupBaseLights();
+    this._setupInterfaceLayer();
     this._attachEvents();
     this.resize();
 
@@ -140,6 +158,23 @@ class PolygonalScene {
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
     this.container.appendChild(this.renderer.domElement);
+  }
+
+  _setupInterfaceLayer() {
+    const style = window.getComputedStyle(this.container);
+    if (style.position === "static") {
+      this.container.style.position = "relative";
+    }
+
+    this.interfaceLayer = document.createElement("div");
+    this.interfaceLayer.style.position = "absolute";
+    this.interfaceLayer.style.left = "0";
+    this.interfaceLayer.style.top = "0";
+    this.interfaceLayer.style.width = "100%";
+    this.interfaceLayer.style.height = "100%";
+    this.interfaceLayer.style.pointerEvents = "none";
+    this.interfaceLayer.style.overflow = "hidden";
+    this.container.appendChild(this.interfaceLayer);
   }
 
   _setupBaseLights() {
@@ -179,6 +214,7 @@ class PolygonalScene {
   _registerObject(object, preferredId, pickable = true) {
     const id = preferredId ?? nextId("object");
     object.userData.polygonalId = id;
+    object.userData.collisionMode = normalizeCollisionMode(object.userData.collisionMode);
     this.objects.set(id, object);
     this.scene.add(object);
 
@@ -186,7 +222,7 @@ class PolygonalScene {
       this.meshesForPicking.push(object);
     }
 
-    return id;
+    return object;
   }
 
   _registerLight(light, preferredId) {
@@ -194,7 +230,7 @@ class PolygonalScene {
     light.userData.polygonalId = id;
     this.lights.set(id, light);
     this.scene.add(light);
-    return id;
+    return light;
   }
 
   _resolveObject(target) {
@@ -285,6 +321,150 @@ class PolygonalScene {
     }
   }
 
+  _projectWorldToScreen(position) {
+    const projected = position.clone().project(this.camera);
+
+    return {
+      x: ((projected.x + 1) / 2) * this.renderer.domElement.clientWidth,
+      y: ((-projected.y + 1) / 2) * this.renderer.domElement.clientHeight,
+      visible: projected.z >= -1 && projected.z <= 1
+    };
+  }
+
+  _updateInterfaces() {
+    if (this.interfaces.size === 0) {
+      return;
+    }
+
+    for (const iface of this.interfaces.values()) {
+      const { element } = iface;
+
+      if (iface.mode === "surface") {
+        const object = this._resolveObject(iface.target);
+        if (!object) {
+          element.style.display = "none";
+          continue;
+        }
+
+        const worldPos = toVector3(iface.localX, iface.localY, iface.localZ);
+        object.updateMatrixWorld(true);
+        worldPos.applyMatrix4(object.matrixWorld);
+
+        const point = this._projectWorldToScreen(worldPos);
+        if (!point.visible) {
+          element.style.display = "none";
+          continue;
+        }
+
+        element.style.display = "block";
+        iface.x = point.x;
+        iface.y = point.y;
+      }
+
+      element.style.width = `${iface.width}px`;
+      element.style.height = `${iface.height}px`;
+      element.style.opacity = String(clamp(iface.opacity, 0, 1));
+      element.style.transform = `translate(${iface.x}px, ${iface.y}px) translate(-50%, -50%) rotate(${iface.rotation}rad) scale(${iface.scaleX}, ${iface.scaleY})`;
+    }
+  }
+
+  _updateSounds() {
+    if (this.sounds.size === 0) {
+      return;
+    }
+
+    for (const sound of this.sounds.values()) {
+      if (sound.kind !== "local") {
+        continue;
+      }
+
+      let position = null;
+
+      if (sound.target) {
+        const object = this._resolveObject(sound.target);
+        if (object) {
+          position = new THREE.Vector3();
+          object.getWorldPosition(position);
+        }
+      }
+
+      if (!position) {
+        position = toVector3(sound.x, sound.y, sound.z);
+      }
+
+      const distance = position.distanceTo(this.camera.position);
+      const normalized = clamp(1 - distance / Math.max(0.001, sound.range), 0, 1);
+      sound.audio.volume = clamp(sound.baseVolume * normalized, 0, 1);
+    }
+  }
+
+  _cleanupSound(sound) {
+    if (!sound || !sound.audio) {
+      return;
+    }
+
+    sound.audio.pause();
+    sound.audio.src = "";
+    sound.audio.load();
+  }
+
+  _cleanupInterface(iface) {
+    if (!iface) {
+      return;
+    }
+
+    for (const entry of iface.clickHandlers ?? []) {
+      iface.element.removeEventListener("click", entry.wrapped);
+    }
+
+    iface.element.remove();
+  }
+
+  _getCollisionMode(object) {
+    return normalizeCollisionMode(object?.userData?.collisionMode);
+  }
+
+  _collectCollisionVolumes(object, mode) {
+    if (mode === "precise") {
+      const boxes = [];
+
+      object.traverse((child) => {
+        if (!child.isMesh) {
+          return;
+        }
+
+        boxes.push(new THREE.Box3().setFromObject(child));
+      });
+
+      return boxes.length > 0 ? boxes : [new THREE.Box3().setFromObject(object)];
+    }
+
+    return [new THREE.Box3().setFromObject(object)];
+  }
+
+  _hasCollisionBetween(a, b) {
+    const modeA = this._getCollisionMode(a);
+    const modeB = this._getCollisionMode(b);
+
+    if (modeA === "none" || modeB === "none") {
+      return false;
+    }
+
+    const precision = modeA === "precise" || modeB === "precise" ? "precise" : "simple";
+    const volumesA = this._collectCollisionVolumes(a, precision);
+    const volumesB = this._collectCollisionVolumes(b, precision);
+
+    for (const volumeA of volumesA) {
+      for (const volumeB of volumesB) {
+        if (volumeA.intersectsBox(volumeB)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   _stepPhysics(delta) {
     if (this.physicsBodies.size === 0) {
       return;
@@ -335,7 +515,7 @@ class PolygonalScene {
         }
 
         const otherBounds = new THREE.Box3().setFromObject(otherObject);
-        if (bounds.intersectsBox(otherBounds)) {
+        if (this._hasCollisionBetween(object, otherObject) && bounds.intersectsBox(otherBounds)) {
           collided = true;
           break;
         }
@@ -400,6 +580,8 @@ class PolygonalScene {
 
       this._stepPhysics(delta);
       this._updateWelds();
+      this._updateInterfaces();
+      this._updateSounds();
       this._updateHoverState();
       this.updateCallbacks.forEach((callback) => callback(delta));
 
@@ -431,8 +613,16 @@ class PolygonalScene {
     this.lights.clear();
     this.physicsBodies.clear();
     this.welds.clear();
+    this.sounds.forEach((sound) => this._cleanupSound(sound));
+    this.sounds.clear();
+    this.interfaces.forEach((iface) => this._cleanupInterface(iface));
+    this.interfaces.clear();
     this.meshesForPicking.length = 0;
     this.updateCallbacks.clear();
+
+    if (this.interfaceLayer?.parentElement) {
+      this.interfaceLayer.parentElement.removeChild(this.interfaceLayer);
+    }
   }
 
   onUpdate(callback) {
@@ -524,6 +714,12 @@ class PolygonalScene {
     this.objects.delete(object.userData.polygonalId);
     this.physicsBodies.delete(object.userData.polygonalId);
     this._detachObjectFromWelds(object.userData.polygonalId);
+    this.interfaces.forEach((iface) => {
+      const targetId = this._resolveObjectId(iface.target);
+      if (targetId && targetId === object.userData.polygonalId) {
+        iface.target = null;
+      }
+    });
     this.meshesForPicking = this.meshesForPicking.filter((entry) => entry !== object);
 
     if (this._hoveredObject === object) {
@@ -579,7 +775,7 @@ class PolygonalScene {
       return false;
     }
 
-    object.rotation.set(x, y, z);
+    object.rotation.set(degToRad(x), degToRad(y), degToRad(z));
     return true;
   }
 
@@ -589,9 +785,9 @@ class PolygonalScene {
       return false;
     }
 
-    object.rotation.x += dx;
-    object.rotation.y += dy;
-    object.rotation.z += dz;
+    object.rotation.x += degToRad(dx);
+    object.rotation.y += degToRad(dy);
+    object.rotation.z += degToRad(dz);
     return true;
   }
 
@@ -625,6 +821,58 @@ class PolygonalScene {
       }
     });
 
+    return true;
+  }
+
+  setObjectTransparency(target, transparency = 0) {
+    const object = this._resolveObject(target);
+    if (!object) {
+      return false;
+    }
+
+    const opacity = 1 - clamp(transparency, 0, 1);
+
+    object.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.material.transparent = opacity < 1;
+        child.material.opacity = opacity;
+        child.material.needsUpdate = true;
+      }
+    });
+
+    return true;
+  }
+
+  setObjectReflectance(target, reflectance = 0) {
+    const object = this._resolveObject(target);
+    if (!object) {
+      return false;
+    }
+
+    const clamped = clamp(reflectance, 0, 1);
+
+    object.traverse((child) => {
+      if (child.isMesh && child.material) {
+        if ("metalness" in child.material) {
+          child.material.metalness = clamped;
+        }
+        if ("roughness" in child.material) {
+          child.material.roughness = 1 - clamped;
+        }
+        child.material.needsUpdate = true;
+      }
+    });
+
+    return true;
+  }
+
+  setObjectCollisionMode(target, mode = "simple") {
+    const object = this._resolveObject(target);
+    if (!object) {
+      return false;
+    }
+
+    object.userData.collisionMode = normalizeCollisionMode(mode);
     return true;
   }
 
@@ -720,14 +968,14 @@ class PolygonalScene {
     this.physics.floorY = null;
   }
 
-  createWeld(targets = [], options = {}) {
+  createGroup(targets = [], options = {}) {
     const resolvedObjects = [...new Set(targets.map((target) => this._resolveObject(target)).filter(Boolean))];
 
     if (resolvedObjects.length < 2) {
       return null;
     }
 
-    const anchor = options.anchor ? this._resolveObject(options.anchor) : resolvedObjects[0];
+    const anchor = options.primary ? this._resolveObject(options.primary) : resolvedObjects[0];
     if (!anchor) {
       return null;
     }
@@ -756,7 +1004,7 @@ class PolygonalScene {
       offsets.set(memberId, offset);
     }
 
-    const weldId = options.id ?? nextId("weld");
+    const weldId = options.id ?? nextId("group");
     this.welds.set(weldId, {
       id: weldId,
       anchorId,
@@ -767,21 +1015,79 @@ class PolygonalScene {
     return weldId;
   }
 
-  removeWeld(weldId) {
-    return this.welds.delete(weldId);
+  setGroupPrimary(groupId, target) {
+    const weld = this.welds.get(groupId);
+    const nextPrimary = this._resolveObject(target);
+
+    if (!weld || !nextPrimary) {
+      return false;
+    }
+
+    const nextPrimaryId = nextPrimary.userData.polygonalId;
+    if (nextPrimaryId !== weld.anchorId && !weld.memberIds.includes(nextPrimaryId)) {
+      return false;
+    }
+
+    const groupIds = [weld.anchorId, ...weld.memberIds];
+    const uniqueIds = [...new Set(groupIds)];
+
+    nextPrimary.updateMatrixWorld(true);
+    const primaryInverse = new THREE.Matrix4().copy(nextPrimary.matrixWorld).invert();
+    const offsets = new Map();
+
+    for (const memberId of uniqueIds) {
+      if (memberId === nextPrimaryId) {
+        continue;
+      }
+
+      const member = this.objects.get(memberId);
+      if (!member) {
+        continue;
+      }
+
+      member.updateMatrixWorld(true);
+      offsets.set(memberId, new THREE.Matrix4().multiplyMatrices(primaryInverse, member.matrixWorld));
+    }
+
+    weld.anchorId = nextPrimaryId;
+    weld.memberIds = [...offsets.keys()];
+    weld.offsets = offsets;
+    return true;
   }
 
-  getWeld(weldId) {
-    const weld = this.welds.get(weldId);
+  moveGroupBy(groupId, dx = 0, dy = 0, dz = 0) {
+    const weld = this.welds.get(groupId);
+    if (!weld) {
+      return false;
+    }
+
+    return this.moveObjectBy(weld.anchorId, dx, dy, dz);
+  }
+
+  rotateGroupBy(groupId, dx = 0, dy = 0, dz = 0) {
+    const weld = this.welds.get(groupId);
+    if (!weld) {
+      return false;
+    }
+
+    return this.rotateObjectBy(weld.anchorId, dx, dy, dz);
+  }
+
+  getGroup(groupId) {
+    const weld = this.welds.get(groupId);
     if (!weld) {
       return null;
     }
 
     return {
       id: weld.id,
-      anchorId: weld.anchorId,
-      memberIds: [...weld.memberIds]
+      primaryId: weld.anchorId,
+      memberIds: weld.memberIds
     };
+  }
+
+  removeGroup(groupId) {
+    return this.welds.delete(groupId);
   }
 
   checkCollision(targetA, targetB) {
@@ -792,9 +1098,418 @@ class PolygonalScene {
       return false;
     }
 
-    const boxA = new THREE.Box3().setFromObject(a);
-    const boxB = new THREE.Box3().setFromObject(b);
-    return boxA.intersectsBox(boxB);
+    return this._hasCollisionBetween(a, b);
+  }
+
+  createGlobalSound(url, options = {}) {
+    const soundId = options.id ?? nextId("sound");
+    const audio = new Audio(url);
+    audio.loop = options.loop ?? false;
+    audio.volume = clamp(options.volume ?? 1, 0, 1);
+
+    const sound = {
+      id: soundId,
+      kind: "global",
+      audio,
+      baseVolume: audio.volume,
+      range: options.range ?? 15,
+      target: null,
+      x: 0,
+      y: 0,
+      z: 0
+    };
+
+    this.sounds.set(soundId, sound);
+    if (options.autoplay) {
+      audio.play().catch(() => {});
+    }
+
+    return soundId;
+  }
+
+  createLocalSound(url, options = {}) {
+    const soundId = options.id ?? nextId("sound");
+    const audio = new Audio(url);
+    audio.loop = options.loop ?? false;
+    audio.volume = clamp(options.volume ?? 1, 0, 1);
+
+    const sound = {
+      id: soundId,
+      kind: "local",
+      audio,
+      baseVolume: audio.volume,
+      range: options.range ?? 15,
+      target: options.target ?? null,
+      x: options.x ?? 0,
+      y: options.y ?? 0,
+      z: options.z ?? 0
+    };
+
+    this.sounds.set(soundId, sound);
+    if (options.autoplay) {
+      audio.play().catch(() => {});
+    }
+
+    return soundId;
+  }
+
+  playSound(soundId) {
+    const sound = this.sounds.get(soundId);
+    if (!sound) {
+      return false;
+    }
+
+    sound.audio.play().catch(() => {});
+    return true;
+  }
+
+  pauseSound(soundId) {
+    const sound = this.sounds.get(soundId);
+    if (!sound) {
+      return false;
+    }
+
+    sound.audio.pause();
+    return true;
+  }
+
+  stopSound(soundId) {
+    const sound = this.sounds.get(soundId);
+    if (!sound) {
+      return false;
+    }
+
+    sound.audio.pause();
+    sound.audio.currentTime = 0;
+    return true;
+  }
+
+  setSoundVolume(soundId, volume) {
+    const sound = this.sounds.get(soundId);
+    if (!sound) {
+      return false;
+    }
+
+    const clamped = clamp(volume, 0, 1);
+    sound.baseVolume = clamped;
+    sound.audio.volume = clamped;
+    return true;
+  }
+
+  setLocalSoundPosition(soundId, x = 0, y = 0, z = 0) {
+    const sound = this.sounds.get(soundId);
+    if (!sound || sound.kind !== "local") {
+      return false;
+    }
+
+    sound.target = null;
+    sound.x = x;
+    sound.y = y;
+    sound.z = z;
+    return true;
+  }
+
+  attachSoundToObject(soundId, target) {
+    const sound = this.sounds.get(soundId);
+    const objectId = this._resolveObjectId(target);
+
+    if (!sound || sound.kind !== "local" || !objectId) {
+      return false;
+    }
+
+    sound.target = objectId;
+    return true;
+  }
+
+  removeSound(soundId) {
+    const sound = this.sounds.get(soundId);
+    if (!sound) {
+      return false;
+    }
+
+    this._cleanupSound(sound);
+    return this.sounds.delete(soundId);
+  }
+
+  getSound(soundId) {
+    const sound = this.sounds.get(soundId);
+    if (!sound) {
+      return null;
+    }
+
+    return {
+      id: sound.id,
+      kind: sound.kind,
+      volume: sound.baseVolume,
+      range: sound.range,
+      target: sound.target,
+      x: sound.x,
+      y: sound.y,
+      z: sound.z
+    };
+  }
+
+  createInterface(options = {}) {
+    const id = options.id ?? nextId("ui");
+    const element = document.createElement("div");
+    element.style.position = "absolute";
+    element.style.left = "0";
+    element.style.top = "0";
+    element.style.transformOrigin = "center";
+    const clickable = options.clickable ?? false;
+    element.style.pointerEvents = clickable ? "auto" : "none";
+    element.style.display = "block";
+    element.style.zIndex = String(options.layer ?? 0);
+
+    if (options.background) {
+      element.style.background = options.background;
+    }
+
+    const content = document.createElement("div");
+    content.style.width = "100%";
+    content.style.height = "100%";
+    content.style.display = "flex";
+    content.style.alignItems = options.alignY ?? "center";
+    content.style.justifyContent = options.alignX ?? "center";
+    content.style.textAlign = "center";
+    content.style.color = options.color ?? "#ffffff";
+    content.style.fontSize = `${options.fontSize ?? 16}px`;
+
+    if (options.svg) {
+      content.innerHTML = options.svg;
+    } else {
+      content.textContent = options.text ?? "";
+    }
+
+    element.appendChild(content);
+    this.interfaceLayer.appendChild(element);
+
+    this.interfaces.set(id, {
+      id,
+      element,
+      content,
+      clickable,
+      clickHandlers: new Set(),
+      layer: options.layer ?? 0,
+      mode: options.mode === "surface" ? "surface" : "overlay",
+      target: options.target ?? null,
+      localX: options.localX ?? 0,
+      localY: options.localY ?? 0,
+      localZ: options.localZ ?? 0,
+      x: options.x ?? this.renderer.domElement.clientWidth / 2,
+      y: options.y ?? this.renderer.domElement.clientHeight / 2,
+      width: options.width ?? 160,
+      height: options.height ?? 60,
+      rotation: options.rotation ?? 0,
+      scaleX: options.scaleX ?? 1,
+      scaleY: options.scaleY ?? 1,
+      opacity: options.opacity ?? 1
+    });
+
+    if (typeof options.onClick === "function") {
+      this.onInterfaceClick(id, options.onClick);
+    }
+
+    return id;
+  }
+
+  removeInterface(interfaceId) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    this._cleanupInterface(iface);
+    return this.interfaces.delete(interfaceId);
+  }
+
+  setInterfaceText(interfaceId, text) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.content.innerHTML = "";
+    iface.content.textContent = text;
+    return true;
+  }
+
+  setInterfaceSVG(interfaceId, svgMarkup) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.content.innerHTML = svgMarkup;
+    return true;
+  }
+
+  setInterfaceMode(interfaceId, mode = "overlay") {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.mode = mode === "surface" ? "surface" : "overlay";
+    return true;
+  }
+
+  setInterfaceLayer(interfaceId, layer = 0) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.layer = layer;
+    iface.element.style.zIndex = String(layer);
+    return true;
+  }
+
+  setInterfaceClickable(interfaceId, clickable = true) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.clickable = clickable;
+    iface.element.style.pointerEvents = clickable ? "auto" : "none";
+    return true;
+  }
+
+  onInterfaceClick(interfaceId, handler) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface || typeof handler !== "function") {
+      return () => {};
+    }
+
+    const wrapped = (event) => {
+      handler({
+        id: interfaceId,
+        x: event.clientX,
+        y: event.clientY,
+        target: iface.target,
+        mode: iface.mode,
+        originalEvent: event
+      });
+    };
+
+    iface.clickHandlers.add({ handler, wrapped });
+    iface.element.addEventListener("click", wrapped);
+
+    return () => {
+      iface.element.removeEventListener("click", wrapped);
+
+      for (const entry of iface.clickHandlers) {
+        if (entry.handler === handler && entry.wrapped === wrapped) {
+          iface.clickHandlers.delete(entry);
+          break;
+        }
+      }
+    };
+  }
+
+  attachInterfaceToObject(interfaceId, target, options = {}) {
+    const iface = this.interfaces.get(interfaceId);
+    const targetId = this._resolveObjectId(target);
+
+    if (!iface || !targetId) {
+      return false;
+    }
+
+    iface.mode = "surface";
+    iface.target = targetId;
+    iface.localX = options.localX ?? iface.localX;
+    iface.localY = options.localY ?? iface.localY;
+    iface.localZ = options.localZ ?? iface.localZ;
+    return true;
+  }
+
+  setInterfaceScreenPosition(interfaceId, x, y) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.mode = "overlay";
+    iface.x = x;
+    iface.y = y;
+    return true;
+  }
+
+  moveInterfaceBy(interfaceId, dx = 0, dy = 0) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.x += dx;
+    iface.y += dy;
+    return true;
+  }
+
+  resizeInterface(interfaceId, width, height) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.width = width;
+    iface.height = height;
+    return true;
+  }
+
+  stretchInterface(interfaceId, scaleX = 1, scaleY = 1) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.scaleX = scaleX;
+    iface.scaleY = scaleY;
+    return true;
+  }
+
+  rotateInterface(interfaceId, radians = 0) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.rotation = radians;
+    return true;
+  }
+
+  setInterfaceTransparency(interfaceId, transparency = 0) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    iface.opacity = 1 - clamp(transparency, 0, 1);
+    return true;
+  }
+
+  getInterface(interfaceId) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return null;
+    }
+
+    return {
+      id: iface.id,
+      mode: iface.mode,
+      target: iface.target,
+      x: iface.x,
+      y: iface.y,
+      width: iface.width,
+      height: iface.height,
+      rotation: iface.rotation,
+      scaleX: iface.scaleX,
+      scaleY: iface.scaleY,
+      opacity: iface.opacity,
+      clickable: iface.clickable,
+      layer: iface.layer
+    };
   }
 
   getHoveredObject() {
@@ -819,7 +1534,7 @@ class PolygonalScene {
   }
 
   rotateCameraTo(x = 0, y = 0, z = 0) {
-    this.camera.rotation.set(x, y, z);
+    this.camera.rotation.set(degToRad(x), degToRad(y), degToRad(z));
   }
 
   lookAt(x, y, z) {
@@ -1000,7 +1715,3 @@ export function createScene(options = {}) {
 }
 
 export { PolygonalScene };
-
-// Backward-compatible aliases
-export const createWorld = createScene;
-export const PolygonalWorld = PolygonalScene;

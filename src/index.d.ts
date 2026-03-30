@@ -100,15 +100,100 @@ export type PhysicsOptions = {
   vz?: number;
 };
 
-export type WeldOptions = {
+export type GroupOptions = {
   id?: string;
-  anchor?: string | object;
+  primary?: string | object;
 };
 
-export type WeldInfo = {
+export type GroupInfo = {
   id: string;
-  anchorId: string;
+  primaryId: string;
   memberIds: string[];
+};
+
+export type CollisionMode = "none" | "simple" | "precise";
+
+export type SoundOptions = {
+  id?: string;
+  loop?: boolean;
+  volume?: number;
+  autoplay?: boolean;
+  range?: number;
+  target?: string | object;
+  x?: number;
+  y?: number;
+  z?: number;
+};
+
+export type SoundInfo = {
+  id: string;
+  kind: "global" | "local";
+  volume: number;
+  range: number;
+  target: string | null;
+  x: number;
+  y: number;
+  z: number;
+};
+
+export type InterfaceMode = "overlay" | "surface";
+
+export type InterfaceOptions = {
+  id?: string;
+  mode?: InterfaceMode;
+  target?: string | object;
+  localX?: number;
+  localY?: number;
+  localZ?: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  rotation?: number;
+  scaleX?: number;
+  scaleY?: number;
+  opacity?: number;
+  background?: string;
+  text?: string;
+  svg?: string;
+  color?: string;
+  fontSize?: number;
+  clickable?: boolean;
+  layer?: number;
+  onClick?: (event: InterfaceClickEvent) => void;
+  alignX?: string;
+  alignY?: string;
+};
+
+export type InterfaceClickEvent = {
+  id: string;
+  x: number;
+  y: number;
+  target: string | null;
+  mode: InterfaceMode;
+  originalEvent: MouseEvent;
+};
+
+export type InterfaceAttachOptions = {
+  localX?: number;
+  localY?: number;
+  localZ?: number;
+};
+
+export type InterfaceInfo = {
+  id: string;
+  mode: InterfaceMode;
+  target: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+  opacity: number;
+  clickable: boolean;
+  layer: number;
 };
 
 export class PolygonalScene {
@@ -121,11 +206,11 @@ export class PolygonalScene {
 
   onUpdate(callback: (delta: number) => void): () => void;
 
-  createBox(options?: BoxOptions): string;
-  createSphere(options?: SphereOptions): string;
-  createCylinder(options?: CylinderOptions): string;
-  createPlane(options?: PlaneOptions): string;
-  importOBJ(url: string, options?: ImportOBJOptions): Promise<string>;
+  createBox(options?: BoxOptions): object;
+  createSphere(options?: SphereOptions): object;
+  createCylinder(options?: CylinderOptions): object;
+  createPlane(options?: PlaneOptions): object;
+  importOBJ(url: string, options?: ImportOBJOptions): Promise<object>;
 
   removeObject(target: string | object): boolean;
   getObject(target: string | object): object | null;
@@ -138,6 +223,9 @@ export class PolygonalScene {
   rotateObjectBy(target: string | object, dx?: number, dy?: number, dz?: number): boolean;
   setObjectColor(target: string | object, color: string): boolean;
   setObjectTexture(target: string | object, textureUrl: string): boolean;
+  setObjectTransparency(target: string | object, transparency?: number): boolean;
+  setObjectReflectance(target: string | object, reflectance?: number): boolean;
+  setObjectCollisionMode(target: string | object, mode?: CollisionMode): boolean;
   enablePhysics(target: string | object, options?: PhysicsOptions): boolean;
   disablePhysics(target: string | object): boolean;
   setPhysicsVelocity(target: string | object, vx?: number, vy?: number, vz?: number): boolean;
@@ -145,9 +233,40 @@ export class PolygonalScene {
   setGravity(x?: number, y?: number, z?: number): void;
   setPhysicsFloor(y: number): void;
   clearPhysicsFloor(): void;
-  createWeld(targets: Array<string | object>, options?: WeldOptions): string | null;
-  removeWeld(weldId: string): boolean;
-  getWeld(weldId: string): WeldInfo | null;
+  createGroup(targets: Array<string | object>, options?: GroupOptions): string | null;
+  setGroupPrimary(groupId: string, target: string | object): boolean;
+  moveGroupBy(groupId: string, dx?: number, dy?: number, dz?: number): boolean;
+  rotateGroupBy(groupId: string, dx?: number, dy?: number, dz?: number): boolean;
+  getGroup(groupId: string): GroupInfo | null;
+  removeGroup(groupId: string): boolean;
+
+  createGlobalSound(url: string, options?: SoundOptions): string;
+  createLocalSound(url: string, options?: SoundOptions): string;
+  playSound(soundId: string): boolean;
+  pauseSound(soundId: string): boolean;
+  stopSound(soundId: string): boolean;
+  setSoundVolume(soundId: string, volume: number): boolean;
+  setLocalSoundPosition(soundId: string, x?: number, y?: number, z?: number): boolean;
+  attachSoundToObject(soundId: string, target: string | object): boolean;
+  removeSound(soundId: string): boolean;
+  getSound(soundId: string): SoundInfo | null;
+
+  createInterface(options?: InterfaceOptions): string;
+  removeInterface(interfaceId: string): boolean;
+  setInterfaceText(interfaceId: string, text: string): boolean;
+  setInterfaceSVG(interfaceId: string, svgMarkup: string): boolean;
+  setInterfaceMode(interfaceId: string, mode?: InterfaceMode): boolean;
+  setInterfaceLayer(interfaceId: string, layer?: number): boolean;
+  setInterfaceClickable(interfaceId: string, clickable?: boolean): boolean;
+  onInterfaceClick(interfaceId: string, handler: (event: InterfaceClickEvent) => void): () => void;
+  attachInterfaceToObject(interfaceId: string, target: string | object, options?: InterfaceAttachOptions): boolean;
+  setInterfaceScreenPosition(interfaceId: string, x: number, y: number): boolean;
+  moveInterfaceBy(interfaceId: string, dx?: number, dy?: number): boolean;
+  resizeInterface(interfaceId: string, width: number, height: number): boolean;
+  stretchInterface(interfaceId: string, scaleX?: number, scaleY?: number): boolean;
+  rotateInterface(interfaceId: string, radians?: number): boolean;
+  setInterfaceTransparency(interfaceId: string, transparency?: number): boolean;
+  getInterface(interfaceId: string): InterfaceInfo | null;
 
   checkCollision(targetA: string | object, targetB: string | object): boolean;
   getHoveredObject(): object | null;
@@ -159,10 +278,10 @@ export class PolygonalScene {
   lookAt(x: number, y: number, z: number): void;
   setCameraFov(fov: number): void;
 
-  createAmbientLight(options?: AmbientLightOptions): string;
-  createDirectionalLight(options?: DirectionalLightOptions): string;
-  createPointLight(options?: PointLightOptions): string;
-  createSpotLight(options?: SpotLightOptions): string;
+  createAmbientLight(options?: AmbientLightOptions): object;
+  createDirectionalLight(options?: DirectionalLightOptions): object;
+  createPointLight(options?: PointLightOptions): object;
+  createSpotLight(options?: SpotLightOptions): object;
 
   moveLightTo(target: string | object, x: number, y: number, z: number): boolean;
   moveLightBy(target: string | object, dx?: number, dy?: number, dz?: number): boolean;
@@ -185,8 +304,3 @@ export class PolygonalScene {
 }
 
 export function createScene(options?: SceneOptions): PolygonalScene;
-
-// Backward-compatible aliases
-export type WorldOptions = SceneOptions;
-export { PolygonalScene as PolygonalWorld };
-export { createScene as createWorld };

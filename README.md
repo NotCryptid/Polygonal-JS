@@ -42,7 +42,6 @@ npm install polygonal-js three
 			const scene = createScene();
 
 			const ground = scene.createPlane({
-				id: "ground",
 				width: 20,
 				height: 20,
 				rotationX: -Math.PI / 2,
@@ -51,7 +50,6 @@ npm install polygonal-js three
 			});
 
 			const cube = scene.createBox({
-				id: "cube",
 				x: 0,
 				y: 0,
 				z: 0,
@@ -60,7 +58,7 @@ npm install polygonal-js three
 			});
 
 			scene.onUpdate((delta) => {
-				scene.rotateObjectBy(cube, 0, delta, 0);
+				scene.rotateObjectBy(cube, 0, 60 * delta, 0);
 			});
 		</script>
 	</body>
@@ -75,7 +73,7 @@ Use this inside your renderer script (or preload-exposed renderer API):
 import { createScene } from "polygonal-js";
 
 const scene = createScene();
-const player = scene.createSphere({ id: "player", radius: 0.75, color: "#f9ed69" });
+const player = scene.createSphere({ radius: 0.75, color: "#f9ed69" });
 
 scene.setCameraPosition(0, 2, 8);
 scene.lookAt(0, 0, 0);
@@ -105,17 +103,16 @@ const scene = createScene({
 ### Object Creation
 
 ```js
-const box = scene.createBox({ id: "box1", width: 1, height: 1, depth: 1, color: "#ff6b6b" });
-const sphere = scene.createSphere({ id: "ball", radius: 0.5, color: "#4d96ff" });
-const cylinder = scene.createCylinder({ id: "col", radiusTop: 0.5, radiusBottom: 0.5, height: 2 });
-const plane = scene.createPlane({ id: "ground", width: 20, height: 20, rotationX: -Math.PI / 2 });
+const box = scene.createBox({ width: 1, height: 1, depth: 1, color: "#ff6b6b" });
+const sphere = scene.createSphere({ radius: 0.5, color: "#4d96ff" });
+const cylinder = scene.createCylinder({ radiusTop: 0.5, radiusBottom: 0.5, height: 2 });
+const plane = scene.createPlane({ width: 20, height: 20, rotationX: -Math.PI / 2 });
 ```
 
 ### OBJ Import
 
 ```js
 const tree = await scene.importOBJ("./assets/tree.obj", {
-	id: "tree01",
 	x: 3,
 	y: 0,
 	z: -5,
@@ -126,25 +123,28 @@ const tree = await scene.importOBJ("./assets/tree.obj", {
 ### Object Manipulation
 
 ```js
-scene.moveObjectTo("box1", 2, 1, -3);
-scene.moveObjectBy("box1", 0.1, 0, 0);
+scene.moveObjectTo(box, 2, 1, -3);
+scene.moveObjectBy(box, 0.1, 0, 0);
 
-scene.scaleObjectTo("box1", 2, 2, 2);
-scene.scaleObjectBy("box1", 1.1, 1, 1);
+scene.scaleObjectTo(box, 2, 2, 2);
+scene.scaleObjectBy(box, 1.1, 1, 1);
 
-scene.rotateObjectTo("box1", 0, Math.PI / 4, 0);
-scene.rotateObjectBy("box1", 0, 0.01, 0);
+scene.rotateObjectTo(box, 0, 45, 0); // degrees
+scene.rotateObjectBy(box, 0, 1, 0);  // degrees delta
 
-scene.setObjectColor("box1", "#00ff88");
-scene.setObjectTexture("box1", "./assets/metal.png");
+scene.setObjectColor(box, "#00ff88");
+scene.setObjectTexture(box, "./assets/metal.png");
+scene.setObjectTransparency(box, 0.35);
+scene.setObjectReflectance(box, 0.8);
+scene.setObjectCollisionMode(box, "precise"); // none | simple | precise
 
-scene.removeObject("box1");
+scene.removeObject(box);
 ```
 
 ### Physics
 
 ```js
-scene.enablePhysics("player", {
+scene.enablePhysics(player, {
 	mass: 1,
 	useGravity: true,
 	bounciness: 0.25,
@@ -157,25 +157,29 @@ scene.enablePhysics("player", {
 scene.setGravity(0, -9.81, 0);
 scene.setPhysicsFloor(-1);
 
-scene.addForce("player", 5, 8, 0);
-scene.setPhysicsVelocity("player", 0, 0, 0);
-scene.disablePhysics("player");
+scene.addForce(player, 5, 8, 0);
+scene.setPhysicsVelocity(player, 0, 0, 0);
+scene.disablePhysics(player);
 scene.clearPhysicsFloor();
 ```
 
-### Welds (Bind Multiple Objects)
+### Groups (Bind Multiple Objects)
 
 ```js
-const weldId = scene.createWeld(["player", "sword", "shield"], {
+const groupId = scene.createGroup([player, sword, shield], {
 	id: "playerGear",
-	anchor: "player"
+	primary: player
 });
 
-// Move anchor and welded members follow while preserving offsets.
-scene.moveObjectBy("player", 1, 0, 0);
+// Move group by moving primary directly or with helper.
+scene.moveGroupBy("playerGear", 1, 0, 0);
 
-const weldInfo = scene.getWeld("playerGear");
-scene.removeWeld("playerGear");
+// Change primary (center point for future group rotation).
+scene.setGroupPrimary("playerGear", shield);
+scene.rotateGroupBy("playerGear", 0, 22.5, 0);
+
+const groupInfo = scene.getGroup("playerGear");
+scene.removeGroup("playerGear");
 ```
 
 ### Camera Commands
@@ -191,12 +195,12 @@ scene.setCameraFov(75);
 ### Collision + Hover
 
 ```js
-if (scene.checkCollision("player", "wall")) {
+if (scene.checkCollision(player, wall)) {
 	console.log("Collision detected");
 }
 
-if (scene.isHovering("player")) {
-	scene.setObjectColor("player", "#ffffff");
+if (scene.isHovering(player)) {
+	scene.setObjectColor(player, "#ffffff");
 }
 
 const hovered = scene.getHoveredObject();
@@ -205,17 +209,95 @@ const hovered = scene.getHoveredObject();
 ### Lights
 
 ```js
-const ambient = scene.createAmbientLight({ id: "amb", color: "#ffffff", brightness: 0.4 });
-const sun = scene.createDirectionalLight({ id: "sun", color: "#fff0cc", brightness: 1.1, x: 50, y: 80, z: 20 });
-const lamp = scene.createPointLight({ id: "lamp", color: "#ffddaa", brightness: 1.2, range: 30, x: 0, y: 3, z: 0 });
-const spot = scene.createSpotLight({ id: "spot", color: "#cce7ff", brightness: 1.0, range: 60, x: 0, y: 8, z: 5 });
+const ambient = scene.createAmbientLight({ color: "#ffffff", brightness: 0.4 });
+const sun = scene.createDirectionalLight({ color: "#fff0cc", brightness: 1.1, x: 50, y: 80, z: 20 });
+const lamp = scene.createPointLight({ color: "#ffddaa", brightness: 1.2, range: 30, x: 0, y: 3, z: 0 });
+const spot = scene.createSpotLight({ color: "#cce7ff", brightness: 1.0, range: 60, x: 0, y: 8, z: 5 });
 
-scene.moveLightTo("lamp", 2, 3, 1);
-scene.moveLightBy("lamp", 0, 0, -1);
-scene.setLightColor("lamp", "#aaffcc");
-scene.setLightBrightness("lamp", 0.8);
-scene.setLightRange("lamp", 40);
-scene.removeLight("spot");
+scene.moveLightTo(lamp, 2, 3, 1);
+scene.moveLightBy(lamp, 0, 0, -1);
+scene.setLightColor(lamp, "#aaffcc");
+scene.setLightBrightness(lamp, 0.8);
+scene.setLightRange(lamp, 40);
+scene.removeLight(spot);
+```
+
+### Sounds (Global + Local)
+
+```js
+const music = scene.createGlobalSound("./assets/music.mp3", {
+	id: "bgm",
+	loop: true,
+	volume: 0.6,
+	autoplay: true
+});
+
+const engine = scene.createLocalSound("./assets/engine.mp3", {
+	id: "engine",
+	target: car,
+	range: 30,
+	loop: true,
+	volume: 1.0
+});
+
+scene.playSound("engine");
+scene.setSoundVolume("engine", 0.7);
+scene.attachSoundToObject("engine", car);
+scene.setLocalSoundPosition("engine", 5, 1, -3);
+scene.pauseSound("engine");
+scene.stopSound("engine");
+scene.removeSound("engine");
+```
+
+### 2D Interfaces (Overlay + Surface)
+
+```js
+const hud = scene.createInterface({
+	id: "hudHealth",
+	mode: "overlay",
+	clickable: true,
+	layer: 20,
+	x: 120,
+	y: 50,
+	width: 180,
+	height: 48,
+	text: "Health: 100",
+	background: "rgba(0,0,0,0.45)",
+	color: "#ffffff",
+	fontSize: 20,
+	onClick: ({ id }) => console.log("clicked", id)
+});
+
+const badge = scene.createInterface({
+	id: "doorBadge",
+	mode: "surface",
+	target: door,
+	localX: 0,
+	localY: 1.2,
+	localZ: 0.02,
+	width: 120,
+	height: 60,
+	svg: '<svg viewBox="0 0 100 50"><rect width="100" height="50" fill="#1d4ed8"/><text x="50" y="30" text-anchor="middle" fill="white">OPEN</text></svg>'
+});
+
+scene.setInterfaceText("hudHealth", "Health: 85");
+scene.setInterfaceSVG("doorBadge", '<svg viewBox="0 0 100 50"><rect width="100" height="50" fill="#dc2626"/></svg>');
+scene.moveInterfaceBy("hudHealth", 10, 0);
+scene.resizeInterface("hudHealth", 220, 56);
+scene.stretchInterface("hudHealth", 1.2, 1);
+scene.rotateInterface("hudHealth", 0.1);
+scene.setInterfaceTransparency("hudHealth", 0.2);
+scene.setInterfaceLayer("hudHealth", 30);
+scene.setInterfaceClickable("hudHealth", true);
+const offClick = scene.onInterfaceClick("hudHealth", (event) => {
+	console.log("HUD clicked", event.x, event.y);
+});
+offClick();
+
+scene.attachInterfaceToObject("hudHealth", player, { localY: 2.2, localZ: 0 });
+scene.setInterfaceMode("hudHealth", "overlay");
+scene.setInterfaceScreenPosition("hudHealth", 150, 40);
+scene.removeInterface("doorBadge");
 ```
 
 ### Environment
@@ -240,6 +322,8 @@ scene.clearFog();
 
 - Works in modern browsers and Electron renderer windows.
 - For Electron, run this from the renderer process (not the main process).
+- `rotateObjectTo`, `rotateObjectBy`, `rotateGroupBy`, and `rotateCameraTo` use degrees.
+- Create methods now return real object references; pass those variables directly into API methods.
 - `setSunTexture`, `setMoonTexture`, and `setCloudTexture` currently store references for your game systems and extensions; core lighting/color/day-night behavior is active now.
 
 ## License
