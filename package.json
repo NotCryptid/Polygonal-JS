@@ -1,0 +1,27 @@
+{
+  "name": "polygonal-js",
+  "version": "0.1.0",
+  "description": "Simple 3D library for HTML and Electron",
+  "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "keywords": [
+    "3d",
+    "threejs",
+    "electron",
+    "html",
+    "game",
+    "library"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.179.1"
+  }
+}
