@@ -2,16 +2,6 @@
   "name": "polygonal-js",
   "version": "0.1.0",
   "description": "Simple 3D library for HTML and Electron",
-  "type": "module",
-  "main": "./src/index.js",
-  "module": "./src/index.js",
-  "types": "./src/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./src/index.d.ts",
-      "import": "./src/index.js"
-    }
-  },
   "keywords": [
     "3d",
     "threejs",
@@ -20,8 +10,31 @@
     "game",
     "library"
   ],
+  "homepage": "https://github.com/NotCryptid/Polygonal-JS#readme",
+  "bugs": {
+    "url": "https://github.com/NotCryptid/Polygonal-JS/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NotCryptid/Polygonal-JS.git"
+  },
   "license": "MIT",
+  "author": "Cryptid",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
     "three": "^0.179.1"
-  }
+  },
+  "devDependencies": {},
+  "module": "./src/index.js"
 }
