@@ -757,39 +757,181 @@ class PolygonalScene {
     }
   }
 
-  _updateWelds() {
+  _applyDistanceConstraint(anchor, member, targetDistance, stiffness = 1) {
+    const anchorPosition = new THREE.Vector3();
+    const memberPosition = new THREE.Vector3();
+    anchor.getWorldPosition(anchorPosition);
+    member.getWorldPosition(memberPosition);
+
+    const deltaVector = new THREE.Vector3().subVectors(memberPosition, anchorPosition);
+    const currentDistance = deltaVector.length();
+
+    if (currentDistance < 1e-6) {
+      deltaVector.set(1, 0, 0);
+    } else {
+      deltaVector.multiplyScalar(1 / currentDistance);
+    }
+
+    const correction = (currentDistance - targetDistance) * clamp(stiffness, 0, 1);
+    if (Math.abs(correction) < 1e-6) {
+      return;
+    }
+
+    member.position.addScaledVector(deltaVector, -correction);
+  }
+
+  _createDistanceWeld(weldType, anchorTarget, memberTarget, options = {}) {
+    const anchor = this._resolveObject(anchorTarget);
+    const member = this._resolveObject(memberTarget);
+
+    if (!anchor || !member) {
+      return null;
+    }
+
+    const anchorId = anchor.userData.polygonalId;
+    const memberId = member.userData.polygonalId;
+
+    if (!anchorId || !memberId || anchorId === memberId) {
+      return null;
+    }
+
+    const anchorPosition = new THREE.Vector3();
+    const memberPosition = new THREE.Vector3();
+    anchor.getWorldPosition(anchorPosition);
+    member.getWorldPosition(memberPosition);
+    const initialDistance = anchorPosition.distanceTo(memberPosition);
+
+    const weldId = options.id ?? nextId(`${weldType}_weld`);
+    const descriptor = {
+      id: weldId,
+      weldType,
+      anchorId,
+      memberIds: [memberId],
+      offsets: new Map()
+    };
+
+    if (weldType === "rope") {
+      const minLength = Math.max(0, options.minLength ?? 0);
+      const configuredMax = options.maxLength ?? options.length ?? initialDistance;
+      descriptor.minLength = minLength;
+      descriptor.maxLength = Math.max(minLength, Math.max(0, configuredMax));
+      descriptor.length = descriptor.maxLength;
+    }
+
+    if (weldType === "spring") {
+      const minLength = Math.max(0, options.minLength ?? initialDistance * 0.5);
+      const maxLength = Math.max(minLength, options.maxLength ?? initialDistance * 1.5);
+      descriptor.minLength = minLength;
+      descriptor.maxLength = maxLength;
+      descriptor.elasticity = clamp(options.elasticity ?? 0.2, 0.01, 1);
+    }
+
+    if (weldType === "elastic") {
+      const minLength = Math.max(0, options.minLength ?? initialDistance * 0.6);
+      const maxLength = Math.max(minLength, options.maxLength ?? initialDistance * 1.8);
+      descriptor.minLength = minLength;
+      descriptor.maxLength = maxLength;
+      descriptor.elasticity = clamp(options.elasticity ?? 0.08, 0.01, 1);
+      descriptor.slack = Math.max(0, options.slack ?? (maxLength - minLength) * 0.4);
+    }
+
+    this.welds.set(weldId, descriptor);
+    return weldId;
+  }
+
+  _updateWelds(delta = 1 / 60) {
     if (this.welds.size === 0) {
       return;
     }
 
     for (const [weldId, weld] of this.welds.entries()) {
-      const anchor = this.objects.get(weld.anchorId);
+      if (weld.weldType === "group") {
+        const anchor = this.objects.get(weld.anchorId);
 
-      if (!anchor) {
+        if (!anchor) {
+          this.welds.delete(weldId);
+          continue;
+        }
+
+        anchor.updateMatrixWorld(true);
+
+        for (const memberId of weld.memberIds) {
+          const member = this.objects.get(memberId);
+          const offset = weld.offsets.get(memberId);
+
+          if (!member || !offset) {
+            continue;
+          }
+
+          const worldMatrix = new THREE.Matrix4().multiplyMatrices(anchor.matrixWorld, offset);
+          const position = new THREE.Vector3();
+          const quaternion = new THREE.Quaternion();
+          const scale = new THREE.Vector3();
+          worldMatrix.decompose(position, quaternion, scale);
+
+          member.position.copy(position);
+          member.quaternion.copy(quaternion);
+          member.scale.copy(scale);
+        }
+
+        continue;
+      }
+
+      const anchor = this.objects.get(weld.anchorId);
+      const memberId = weld.memberIds?.[0] ?? null;
+      const member = memberId ? this.objects.get(memberId) : null;
+
+      if (!anchor || !member) {
         this.welds.delete(weldId);
         continue;
       }
 
-      anchor.updateMatrixWorld(true);
+      const anchorPosition = new THREE.Vector3();
+      const memberPosition = new THREE.Vector3();
+      anchor.getWorldPosition(anchorPosition);
+      member.getWorldPosition(memberPosition);
+      const currentDistance = anchorPosition.distanceTo(memberPosition);
 
-      for (const memberId of weld.memberIds) {
-        const member = this.objects.get(memberId);
-        const offset = weld.offsets.get(memberId);
+      if (weld.weldType === "rope") {
+        const minLength = Math.max(0, weld.minLength ?? 0);
+        const maxLength = Math.max(minLength, weld.maxLength ?? weld.length ?? 0);
 
-        if (!member || !offset) {
+        if (currentDistance < minLength) {
+          this._applyDistanceConstraint(anchor, member, minLength, 1);
+        } else if (currentDistance > maxLength) {
+          this._applyDistanceConstraint(anchor, member, maxLength, 1);
+        }
+        continue;
+      }
+
+      if (weld.weldType === "spring") {
+        const minLength = Math.max(0, weld.minLength ?? 0);
+        const maxLength = Math.max(minLength, weld.maxLength ?? minLength);
+        const targetDistance = clamp(currentDistance, minLength, maxLength);
+        const response = clamp((weld.elasticity ?? 0.2) * Math.min(1, delta * 60), 0.01, 1);
+        this._applyDistanceConstraint(anchor, member, targetDistance, response);
+        continue;
+      }
+
+      if (weld.weldType === "elastic") {
+        const minLength = Math.max(0, weld.minLength ?? 0);
+        const maxLength = Math.max(minLength, weld.maxLength ?? minLength);
+        const slack = Math.max(0, weld.slack ?? 0);
+
+        if (currentDistance > maxLength + slack) {
+          const response = clamp((weld.elasticity ?? 0.08) * Math.min(1, delta * 60), 0.01, 0.4);
+          this._applyDistanceConstraint(anchor, member, maxLength, response);
           continue;
         }
 
-        const worldMatrix = new THREE.Matrix4().multiplyMatrices(anchor.matrixWorld, offset);
-        const position = new THREE.Vector3();
-        const quaternion = new THREE.Quaternion();
-        const scale = new THREE.Vector3();
-        worldMatrix.decompose(position, quaternion, scale);
-
-        member.position.copy(position);
-        member.quaternion.copy(quaternion);
-        member.scale.copy(scale);
+        if (currentDistance < minLength - slack * 0.5) {
+          const response = clamp((weld.elasticity ?? 0.08) * 0.5 * Math.min(1, delta * 60), 0.01, 0.25);
+          this._applyDistanceConstraint(anchor, member, minLength, response);
+        }
+        continue;
       }
+
+      this.welds.delete(weldId);
     }
   }
 
@@ -808,7 +950,7 @@ class PolygonalScene {
       const delta = this.clock.getDelta();
 
       this._stepPhysics(delta);
-      this._updateWelds();
+      this._updateWelds(delta);
       this._updateStretchPlanes();
       this._updateSunDirectionBinding();
       this._updateInterfaces();
@@ -1368,6 +1510,7 @@ class PolygonalScene {
     const weldId = options.id ?? nextId("group");
     this.welds.set(weldId, {
       id: weldId,
+      weldType: "group",
       anchorId,
       memberIds,
       offsets
@@ -1380,7 +1523,7 @@ class PolygonalScene {
     const weld = this.welds.get(groupId);
     const nextPrimary = this._resolveObject(target);
 
-    if (!weld || !nextPrimary) {
+    if (!weld || weld.weldType !== "group" || !nextPrimary) {
       return false;
     }
 
@@ -1418,7 +1561,7 @@ class PolygonalScene {
 
   moveGroupBy(groupId, dx = 0, dy = 0, dz = 0) {
     const weld = this.welds.get(groupId);
-    if (!weld) {
+    if (!weld || weld.weldType !== "group") {
       return false;
     }
 
@@ -1427,7 +1570,7 @@ class PolygonalScene {
 
   rotateGroupBy(groupId, dx = 0, dy = 0, dz = 0) {
     const weld = this.welds.get(groupId);
-    if (!weld) {
+    if (!weld || weld.weldType !== "group") {
       return false;
     }
 
@@ -1436,7 +1579,7 @@ class PolygonalScene {
 
   getGroup(groupId) {
     const weld = this.welds.get(groupId);
-    if (!weld) {
+    if (!weld || weld.weldType !== "group") {
       return null;
     }
 
@@ -1448,7 +1591,65 @@ class PolygonalScene {
   }
 
   removeGroup(groupId) {
+    const weld = this.welds.get(groupId);
+    if (!weld || weld.weldType !== "group") {
+      return false;
+    }
+
     return this.welds.delete(groupId);
+  }
+
+  createSpringWeld(anchorTarget, memberTarget, options = {}) {
+    return this._createDistanceWeld("spring", anchorTarget, memberTarget, options);
+  }
+
+  createRopeWeld(anchorTarget, memberTarget, options = {}) {
+    return this._createDistanceWeld("rope", anchorTarget, memberTarget, options);
+  }
+
+  createElasticWeld(anchorTarget, memberTarget, options = {}) {
+    return this._createDistanceWeld("elastic", anchorTarget, memberTarget, options);
+  }
+
+  getWeld(weldId) {
+    const weld = this.welds.get(weldId);
+    if (!weld || weld.weldType === "group") {
+      return null;
+    }
+
+    const info = {
+      id: weld.id,
+      type: weld.weldType,
+      anchorId: weld.anchorId,
+      memberId: weld.memberIds?.[0] ?? null
+    };
+
+    if (weld.weldType === "rope") {
+      info.length = weld.maxLength ?? weld.length ?? 0;
+      info.minLength = weld.minLength ?? 0;
+      info.maxLength = weld.maxLength ?? weld.length ?? 0;
+    }
+
+    if (weld.weldType === "spring" || weld.weldType === "elastic") {
+      info.minLength = weld.minLength ?? 0;
+      info.maxLength = weld.maxLength ?? 0;
+      info.elasticity = weld.elasticity ?? 0;
+    }
+
+    if (weld.weldType === "elastic") {
+      info.slack = weld.slack ?? 0;
+    }
+
+    return info;
+  }
+
+  removeWeld(weldId) {
+    const weld = this.welds.get(weldId);
+    if (!weld || weld.weldType === "group") {
+      return false;
+    }
+
+    return this.welds.delete(weldId);
   }
 
   checkCollision(targetA, targetB) {

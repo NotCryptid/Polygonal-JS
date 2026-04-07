@@ -191,6 +191,31 @@ const groupInfo = scene.getGroup("playerGear");
 scene.removeGroup("playerGear");
 ```
 
+### Welds (Spring, Rope, Elastic)
+
+```js
+const springWeld = scene.createSpringWeld(player, crate, {
+	minLength: 1,
+	maxLength: 4,
+	elasticity: 0.25
+});
+
+const ropeWeld = scene.createRopeWeld(hook, lantern, {
+	length: 6,
+	minLength: 0
+});
+
+const elasticWeld = scene.createElasticWeld(hand, balloon, {
+	minLength: 0.8,
+	maxLength: 5,
+	elasticity: 0.1,
+	slack: 0.75
+});
+
+const springInfo = scene.getWeld(springWeld);
+scene.removeWeld(ropeWeld);
+```
+
 ### Camera Commands
 
 ```js
@@ -342,6 +367,9 @@ scene.clearFog();
 - Created objects expose direct helper methods (for example `object.moveObjectBy(...)`) in addition to scene-level methods.
 - `isHovering(object)` only returns true when that object is the front-most unobstructed object under the cursor.
 - `setSunTexture`, `setMoonTexture`, and `setCloudTexture` currently store references for your game systems and extensions; core lighting/color/day-night behavior is active now.
+- Spring welds keep an object between `minLength` and `maxLength` from the anchor using `elasticity` as response speed.
+- Rope welds clamp distance to a max length (`length` or `maxLength`) and optionally support `minLength`.
+- Elastic welds are intentionally looser than spring welds and can use `slack` for extra rubber-band behavior.
 
 ## License
 

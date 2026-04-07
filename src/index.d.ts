@@ -134,6 +134,42 @@ export type GroupInfo = {
   memberIds: string[];
 };
 
+export type SpringWeldOptions = {
+  id?: string;
+  minLength?: number;
+  maxLength?: number;
+  elasticity?: number;
+};
+
+export type RopeWeldOptions = {
+  id?: string;
+  length?: number;
+  minLength?: number;
+  maxLength?: number;
+};
+
+export type ElasticWeldOptions = {
+  id?: string;
+  minLength?: number;
+  maxLength?: number;
+  elasticity?: number;
+  slack?: number;
+};
+
+export type WeldType = "spring" | "rope" | "elastic";
+
+export type WeldInfo = {
+  id: string;
+  type: WeldType;
+  anchorId: string;
+  memberId: string | null;
+  length?: number;
+  minLength?: number;
+  maxLength?: number;
+  elasticity?: number;
+  slack?: number;
+};
+
 export type CollisionMode = "none" | "simple" | "precise";
 
 export type OutlineOptions = {
@@ -297,6 +333,11 @@ export class PolygonalScene {
   rotateGroupBy(groupId: string, dx?: number, dy?: number, dz?: number): boolean;
   getGroup(groupId: string): GroupInfo | null;
   removeGroup(groupId: string): boolean;
+  createSpringWeld(anchorTarget: string | object, memberTarget: string | object, options?: SpringWeldOptions): string | null;
+  createRopeWeld(anchorTarget: string | object, memberTarget: string | object, options?: RopeWeldOptions): string | null;
+  createElasticWeld(anchorTarget: string | object, memberTarget: string | object, options?: ElasticWeldOptions): string | null;
+  getWeld(weldId: string): WeldInfo | null;
+  removeWeld(weldId: string): boolean;
 
   createGlobalSound(url: string, options?: SoundOptions): string;
   createLocalSound(url: string, options?: SoundOptions): string;
