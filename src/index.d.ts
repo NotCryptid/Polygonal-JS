@@ -282,7 +282,8 @@ export type InterfaceMode = "overlay" | "surface";
 
 export type InterfaceOptions = {
   id?: string;
-  mode?: InterfaceMode;
+  mode?: InterfaceMode | InterfaceImageMode;
+  backgroundMode?: InterfaceImageMode;
   target?: string | object;
   localX?: number;
   localY?: number;
@@ -305,6 +306,11 @@ export type InterfaceOptions = {
   onClick?: (event: InterfaceClickEvent) => void;
   alignX?: string;
   alignY?: string;
+  tileSize?: number;
+  tileWidth?: number;
+  tileHeight?: number;
+  tileOffsetX?: number;
+  tileOffsetY?: number;
 };
 
 export type InterfaceTextOptions = {

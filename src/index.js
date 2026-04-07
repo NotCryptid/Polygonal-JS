@@ -118,6 +118,44 @@ function applyInterfaceImagePresentation(element, options = {}) {
   element.style.backgroundSize = `${sizeX} ${sizeY}`;
 }
 
+function applyInterfaceBackgroundPresentation(element, options = {}) {
+  const mode = normalizeImageMode(options.mode ?? "fit");
+  const tileWidth = normalizePositiveNumber(options.tileWidth ?? options.tileSize, undefined);
+  const tileHeight = normalizePositiveNumber(options.tileHeight ?? options.tileSize, undefined);
+
+  element.style.backgroundPosition = resolveImageBackgroundPosition(options);
+
+  if (mode === "stretch") {
+    element.style.backgroundRepeat = "no-repeat";
+    element.style.backgroundSize = "100% 100%";
+    return;
+  }
+
+  if (mode === "fit") {
+    element.style.backgroundRepeat = "no-repeat";
+    element.style.backgroundSize = "contain";
+    return;
+  }
+
+  if (mode === "crop") {
+    element.style.backgroundRepeat = "no-repeat";
+    element.style.backgroundSize = "cover";
+    return;
+  }
+
+  if (mode === "tileX") {
+    element.style.backgroundRepeat = "repeat-x";
+  } else if (mode === "tileY") {
+    element.style.backgroundRepeat = "repeat-y";
+  } else {
+    element.style.backgroundRepeat = "repeat";
+  }
+
+  const sizeX = tileWidth !== undefined ? `${tileWidth}px` : "auto";
+  const sizeY = tileHeight !== undefined ? `${tileHeight}px` : "auto";
+  element.style.backgroundSize = `${sizeX} ${sizeY}`;
+}
+
 function normalizeCollisionMode(mode) {
   if (mode === "none" || mode === "simple" || mode === "precise") {
     return mode;
@@ -2164,6 +2202,9 @@ class PolygonalScene {
   }
 
   createInterface(options = {}) {
+    const interfaceMode = options.mode === "surface" || options.mode === "overlay" ? options.mode : "overlay";
+    const backgroundMode = options.backgroundMode ?? (interfaceMode === "overlay" && options.mode !== "overlay" ? options.mode : undefined);
+
     const id = options.id ?? nextId("ui");
     const element = document.createElement("div");
     element.style.position = "absolute";
@@ -2177,6 +2218,18 @@ class PolygonalScene {
 
     if (options.background) {
       element.style.background = options.background;
+      if (backgroundMode) {
+        applyInterfaceBackgroundPresentation(element, {
+          mode: backgroundMode,
+          tileSize: options.tileSize,
+          tileWidth: options.tileWidth,
+          tileHeight: options.tileHeight,
+          tileOffsetX: options.tileOffsetX,
+          tileOffsetY: options.tileOffsetY,
+          alignX: options.alignX,
+          alignY: options.alignY
+        });
+      }
     }
 
     const content = document.createElement("div");
@@ -2200,7 +2253,7 @@ class PolygonalScene {
       color: options.color ?? "#ffffff",
       fontSize: options.fontSize ?? 16,
       layer: options.layer ?? 0,
-      mode: options.mode === "surface" ? "surface" : "overlay",
+      mode: interfaceMode,
       target: options.target ?? null,
       localX: options.localX ?? 0,
       localY: options.localY ?? 0,
