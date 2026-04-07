@@ -105,8 +105,28 @@ const scene = createScene({
 	fov: 60,
 	near: 0.1,
 	far: 2500,
+	renderWidth: 1920,
+	renderHeight: 1080,
+	displayMode: "fit",
+	letterboxColor: "#000000",
 	autoStart: true
 });
+```
+
+### Render Resolution + Output Scaling
+
+```js
+// Render internally at 1080p, but display at 960x540 in your page.
+scene.setRenderResolution(1920, 1080);
+scene.setDisplayResolution(960, 540);
+
+// Or let it auto-fit the container while preserving aspect ratio + black bars.
+scene.clearDisplayResolution();
+scene.setRenderScaleMode("fit");
+scene.setLetterboxColor("#000000");
+
+// Stretch mode fills the container (no bars).
+scene.setRenderScaleMode("stretch");
 ```
 
 ### Object Creation
@@ -342,8 +362,22 @@ const hudIcon = scene.createInterfaceImage("hudHealth", {
 	y: 8,
 	width: 28,
 	height: 28,
-	fit: "contain"
+	mode: "fit"
 });
+
+const tiledFrame = scene.createInterfaceImage("hudHealth", {
+	id: "hudFrame",
+	src: "./assets/frame_tile.png",
+	x: 0,
+	y: 0,
+	width: 220,
+	height: 56,
+	mode: "tileXY",
+	tileSize: 16
+});
+
+// Supported image modes: stretch, fit, tileX, tileY, tileXY, crop.
+// Legacy aliases also work: contain -> fit, cover -> crop.
 
 const badge = scene.createInterface({
 	id: "doorBadge",
@@ -368,6 +402,13 @@ scene.createInterfaceText("doorBadge", {
 
 scene.setInterfaceObjectText("hudHealth", "hudHealthText", "Health: 85");
 scene.setInterfaceObjectImage("hudHealth", "hudHealthIcon", "./assets/heart_low.png");
+scene.setInterfaceObjectImageMode("hudHealth", "hudHealthIcon", "crop");
+scene.setInterfaceObjectImageTiling("hudHealth", "hudFrame", {
+	tileWidth: 16,
+	tileHeight: 16,
+	tileOffsetX: 0,
+	tileOffsetY: 0
+});
 scene.moveInterfaceBy("hudHealth", 10, 0);
 scene.resizeInterface("hudHealth", 220, 56);
 scene.stretchInterface("hudHealth", 1.2, 1);

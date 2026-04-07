@@ -20,8 +20,102 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function normalizePositiveNumber(value, fallback) {
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(1, value);
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const normalized = normalizePositiveNumber(value, fallback);
+  if (normalized === fallback) {
+    return fallback;
+  }
+
+  return Math.round(normalized);
+}
+
 function degToRad(value) {
   return (value * Math.PI) / 180;
+}
+
+function normalizeImageMode(mode) {
+  if (mode === "contain") {
+    return "fit";
+  }
+
+  if (mode === "cover") {
+    return "crop";
+  }
+
+  if (mode === "stretch" || mode === "fit" || mode === "tileX" || mode === "tileY" || mode === "tileXY" || mode === "crop") {
+    return mode;
+  }
+
+  return "fit";
+}
+
+function normalizeRenderScaleMode(mode) {
+  if (mode === "fit") {
+    return "fit";
+  }
+
+  return "stretch";
+}
+
+function escapeCssUrl(url) {
+  return String(url).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function resolveImageBackgroundPosition(options = {}) {
+  const alignX = options.alignX ?? "center";
+  const alignY = options.alignY ?? "center";
+  const offsetX = options.tileOffsetX ?? 0;
+  const offsetY = options.tileOffsetY ?? 0;
+  const x = offsetX === 0 ? alignX : `calc(${alignX} + ${offsetX}px)`;
+  const y = offsetY === 0 ? alignY : `calc(${alignY} + ${offsetY}px)`;
+  return `${x} ${y}`;
+}
+
+function applyInterfaceImagePresentation(element, options = {}) {
+  const mode = normalizeImageMode(options.mode ?? options.fit ?? "fit");
+  const tileWidth = normalizePositiveNumber(options.tileWidth ?? options.tileSize, undefined);
+  const tileHeight = normalizePositiveNumber(options.tileHeight ?? options.tileSize, undefined);
+
+  element.style.backgroundImage = options.src ? `url("${escapeCssUrl(options.src)}")` : "none";
+  element.style.backgroundPosition = resolveImageBackgroundPosition(options);
+
+  if (mode === "stretch") {
+    element.style.backgroundRepeat = "no-repeat";
+    element.style.backgroundSize = "100% 100%";
+    return;
+  }
+
+  if (mode === "fit") {
+    element.style.backgroundRepeat = "no-repeat";
+    element.style.backgroundSize = "contain";
+    return;
+  }
+
+  if (mode === "crop") {
+    element.style.backgroundRepeat = "no-repeat";
+    element.style.backgroundSize = "cover";
+    return;
+  }
+
+  if (mode === "tileX") {
+    element.style.backgroundRepeat = "repeat-x";
+  } else if (mode === "tileY") {
+    element.style.backgroundRepeat = "repeat-y";
+  } else {
+    element.style.backgroundRepeat = "repeat";
+  }
+
+  const sizeX = tileWidth !== undefined ? `${tileWidth}px` : "auto";
+  const sizeY = tileHeight !== undefined ? `${tileHeight}px` : "auto";
+  element.style.backgroundSize = `${sizeX} ${sizeY}`;
 }
 
 function normalizeCollisionMode(mode) {
@@ -108,6 +202,15 @@ class PolygonalScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
 
+    this.renderSettings = {
+      renderWidth: normalizePositiveInteger(options.renderWidth, undefined),
+      renderHeight: normalizePositiveInteger(options.renderHeight, undefined),
+      displayWidth: normalizePositiveInteger(options.displayWidth, undefined),
+      displayHeight: normalizePositiveInteger(options.displayHeight, undefined),
+      displayMode: normalizeRenderScaleMode(options.displayMode),
+      letterboxColor: options.letterboxColor ?? "#000000"
+    };
+
     this.clock = new THREE.Clock();
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2(-2, -2);
@@ -165,9 +268,13 @@ class PolygonalScene {
       document.body.style.overflow = "hidden";
     }
 
+    this.container.style.overflow = "hidden";
+    this.container.style.background = this.renderSettings.letterboxColor;
+
     this.renderer.domElement.style.display = "block";
-    this.renderer.domElement.style.width = "100%";
-    this.renderer.domElement.style.height = "100%";
+    this.renderer.domElement.style.position = "absolute";
+    this.renderer.domElement.style.left = "0";
+    this.renderer.domElement.style.top = "0";
     this.container.appendChild(this.renderer.domElement);
   }
 
@@ -181,8 +288,8 @@ class PolygonalScene {
     this.interfaceLayer.style.position = "absolute";
     this.interfaceLayer.style.left = "0";
     this.interfaceLayer.style.top = "0";
-    this.interfaceLayer.style.width = "100%";
-    this.interfaceLayer.style.height = "100%";
+    this.interfaceLayer.style.width = "0";
+    this.interfaceLayer.style.height = "0";
     this.interfaceLayer.style.pointerEvents = "none";
     this.interfaceLayer.style.overflow = "hidden";
     this.container.appendChild(this.interfaceLayer);
@@ -1150,12 +1257,84 @@ class PolygonalScene {
   }
 
   resize() {
-    const width = this.container.clientWidth || window.innerWidth;
-    const height = this.container.clientHeight || window.innerHeight;
+    const containerWidth = this.container.clientWidth || window.innerWidth;
+    const containerHeight = this.container.clientHeight || window.innerHeight;
+    const renderWidth = normalizePositiveInteger(this.renderSettings.renderWidth, containerWidth);
+    const renderHeight = normalizePositiveInteger(this.renderSettings.renderHeight, containerHeight);
 
-    this.camera.aspect = width / height;
+    this.camera.aspect = renderWidth / renderHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height, false);
+    this.renderer.setSize(renderWidth, renderHeight, false);
+
+    this.container.style.background = this.renderSettings.letterboxColor;
+
+    let displayWidth = this.renderSettings.displayWidth;
+    let displayHeight = this.renderSettings.displayHeight;
+
+    if (displayWidth === undefined || displayHeight === undefined) {
+      if (this.renderSettings.displayMode === "fit") {
+        const scale = Math.min(containerWidth / renderWidth, containerHeight / renderHeight);
+        displayWidth = Math.max(1, Math.round(renderWidth * scale));
+        displayHeight = Math.max(1, Math.round(renderHeight * scale));
+      } else {
+        displayWidth = containerWidth;
+        displayHeight = containerHeight;
+      }
+    }
+
+    const clampedDisplayWidth = normalizePositiveInteger(displayWidth, containerWidth);
+    const clampedDisplayHeight = normalizePositiveInteger(displayHeight, containerHeight);
+    const offsetX = Math.round((containerWidth - clampedDisplayWidth) / 2);
+    const offsetY = Math.round((containerHeight - clampedDisplayHeight) / 2);
+
+    this.renderer.domElement.style.left = `${offsetX}px`;
+    this.renderer.domElement.style.top = `${offsetY}px`;
+    this.renderer.domElement.style.width = `${clampedDisplayWidth}px`;
+    this.renderer.domElement.style.height = `${clampedDisplayHeight}px`;
+
+    this.interfaceLayer.style.left = `${offsetX}px`;
+    this.interfaceLayer.style.top = `${offsetY}px`;
+    this.interfaceLayer.style.width = `${clampedDisplayWidth}px`;
+    this.interfaceLayer.style.height = `${clampedDisplayHeight}px`;
+  }
+
+  setRenderResolution(width, height) {
+    this.renderSettings.renderWidth = normalizePositiveInteger(width, this.renderSettings.renderWidth ?? 1);
+    this.renderSettings.renderHeight = normalizePositiveInteger(height, this.renderSettings.renderHeight ?? 1);
+    this.resize();
+  }
+
+  setDisplayResolution(width, height) {
+    this.renderSettings.displayWidth = normalizePositiveInteger(width, this.renderSettings.displayWidth ?? 1);
+    this.renderSettings.displayHeight = normalizePositiveInteger(height, this.renderSettings.displayHeight ?? 1);
+    this.resize();
+  }
+
+  clearDisplayResolution() {
+    this.renderSettings.displayWidth = undefined;
+    this.renderSettings.displayHeight = undefined;
+    this.resize();
+  }
+
+  setRenderScaleMode(mode = "stretch") {
+    this.renderSettings.displayMode = normalizeRenderScaleMode(mode);
+    this.resize();
+  }
+
+  setLetterboxColor(color = "#000000") {
+    this.renderSettings.letterboxColor = color;
+    this.container.style.background = color;
+  }
+
+  getRenderSettings() {
+    return {
+      renderWidth: this.renderSettings.renderWidth,
+      renderHeight: this.renderSettings.renderHeight,
+      displayWidth: this.renderSettings.displayWidth,
+      displayHeight: this.renderSettings.displayHeight,
+      displayMode: this.renderSettings.displayMode,
+      letterboxColor: this.renderSettings.letterboxColor
+    };
   }
 
   createBox(options = {}) {
@@ -2159,24 +2338,35 @@ class PolygonalScene {
     }
 
     const objectId = options.id ?? nextId("ui_image");
-    const element = document.createElement("img");
+    const element = document.createElement("div");
     element.style.position = "absolute";
     element.style.left = `${options.x ?? 0}px`;
     element.style.top = `${options.y ?? 0}px`;
     element.style.width = `${options.width ?? 64}px`;
     element.style.height = `${options.height ?? 64}px`;
-    element.style.objectFit = options.fit ?? "contain";
+    element.style.backgroundPosition = "center";
     element.style.pointerEvents = options.clickable ? "auto" : "none";
 
-    if (options.src) {
-      element.src = options.src;
-    }
+    const imageOptions = {
+      src: options.src,
+      mode: options.mode ?? options.fit ?? "fit",
+      fit: options.fit,
+      tileSize: options.tileSize,
+      tileWidth: options.tileWidth,
+      tileHeight: options.tileHeight,
+      tileOffsetX: options.tileOffsetX,
+      tileOffsetY: options.tileOffsetY,
+      alignX: options.alignX,
+      alignY: options.alignY
+    };
+    applyInterfaceImagePresentation(element, imageOptions);
 
     iface.content.appendChild(element);
     iface.objects.set(objectId, {
       id: objectId,
       type: "image",
-      element
+      element,
+      imageOptions
     });
 
     return objectId;
@@ -2208,7 +2398,55 @@ class PolygonalScene {
       return false;
     }
 
-    descriptor.element.src = src;
+    descriptor.imageOptions = {
+      ...(descriptor.imageOptions ?? {}),
+      src
+    };
+    applyInterfaceImagePresentation(descriptor.element, descriptor.imageOptions);
+    return true;
+  }
+
+  setInterfaceObjectImageMode(interfaceId, objectId, mode = "fit") {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    const descriptor = iface.objects.get(objectId);
+    if (!descriptor || descriptor.type !== "image") {
+      return false;
+    }
+
+    descriptor.imageOptions = {
+      ...(descriptor.imageOptions ?? {}),
+      mode: normalizeImageMode(mode)
+    };
+    applyInterfaceImagePresentation(descriptor.element, descriptor.imageOptions);
+    return true;
+  }
+
+  setInterfaceObjectImageTiling(interfaceId, objectId, options = {}) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    const descriptor = iface.objects.get(objectId);
+    if (!descriptor || descriptor.type !== "image") {
+      return false;
+    }
+
+    descriptor.imageOptions = {
+      ...(descriptor.imageOptions ?? {}),
+      tileSize: options.tileSize,
+      tileWidth: options.tileWidth,
+      tileHeight: options.tileHeight,
+      tileOffsetX: options.tileOffsetX,
+      tileOffsetY: options.tileOffsetY,
+      alignX: options.alignX,
+      alignY: options.alignY
+    };
+    applyInterfaceImagePresentation(descriptor.element, descriptor.imageOptions);
     return true;
   }
 

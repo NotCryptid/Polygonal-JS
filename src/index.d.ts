@@ -28,7 +28,36 @@ export type SceneOptions = {
   near?: number;
   far?: number;
   antialias?: boolean;
+  renderWidth?: number;
+  renderHeight?: number;
+  displayWidth?: number;
+  displayHeight?: number;
+  displayMode?: RenderScaleMode;
+  letterboxColor?: string;
   autoStart?: boolean;
+};
+
+export type RenderScaleMode = "stretch" | "fit";
+
+export type InterfaceImageMode = "stretch" | "fit" | "tileX" | "tileY" | "tileXY" | "crop" | "contain" | "cover";
+
+export type InterfaceImageTilingOptions = {
+  tileSize?: number;
+  tileWidth?: number;
+  tileHeight?: number;
+  tileOffsetX?: number;
+  tileOffsetY?: number;
+  alignX?: string;
+  alignY?: string;
+};
+
+export type RenderSettings = {
+  renderWidth?: number;
+  renderHeight?: number;
+  displayWidth?: number;
+  displayHeight?: number;
+  displayMode: RenderScaleMode;
+  letterboxColor: string;
 };
 
 export type BoxOptions = TransformOptions & MaterialOptions & {
@@ -299,7 +328,15 @@ export type InterfaceImageOptions = {
   y?: number;
   width?: number;
   height?: number;
-  fit?: string;
+  fit?: InterfaceImageMode;
+  mode?: InterfaceImageMode;
+  tileSize?: number;
+  tileWidth?: number;
+  tileHeight?: number;
+  tileOffsetX?: number;
+  tileOffsetY?: number;
+  alignX?: string;
+  alignY?: string;
   clickable?: boolean;
 };
 
@@ -341,6 +378,12 @@ export class PolygonalScene {
   stop(): void;
   destroy(): void;
   resize(): void;
+  setRenderResolution(width: number, height: number): void;
+  setDisplayResolution(width: number, height: number): void;
+  clearDisplayResolution(): void;
+  setRenderScaleMode(mode?: RenderScaleMode): void;
+  setLetterboxColor(color?: string): void;
+  getRenderSettings(): RenderSettings;
 
   onUpdate(callback: (delta: number) => void): () => void;
 
@@ -407,6 +450,8 @@ export class PolygonalScene {
   createInterfaceImage(interfaceId: string, options?: InterfaceImageOptions): string | null;
   setInterfaceObjectText(interfaceId: string, objectId: string, text: string): boolean;
   setInterfaceObjectImage(interfaceId: string, objectId: string, src: string): boolean;
+  setInterfaceObjectImageMode(interfaceId: string, objectId: string, mode?: InterfaceImageMode): boolean;
+  setInterfaceObjectImageTiling(interfaceId: string, objectId: string, options?: InterfaceImageTilingOptions): boolean;
   removeInterfaceObject(interfaceId: string, objectId: string): boolean;
   removeInterface(interfaceId: string): boolean;
   setInterfaceText(interfaceId: string, text: string): boolean;
