@@ -1733,7 +1733,8 @@ class PolygonalScene {
       return false;
     }
 
-    object.position.add(toVector3(dx, dy, dz));
+    const offset = toVector3(dx, dy, dz).applyQuaternion(object.quaternion);
+    object.position.add(offset);
     return true;
   }
 
