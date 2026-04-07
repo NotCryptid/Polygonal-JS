@@ -31,6 +31,14 @@ function normalizeCollisionMode(mode) {
   return "simple";
 }
 
+function normalizeCollisionThickness(value, fallback = 0.05) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, value);
+}
+
 function applyTransform(target, options = {}) {
   const {
     x,
@@ -654,6 +662,16 @@ class PolygonalScene {
   }
 
   _collectCollisionVolumes(object, mode) {
+    const collisionThickness = normalizeCollisionThickness(object?.userData?.collisionThickness, 0);
+    const expandVolume = (box) => {
+      if (collisionThickness <= 0) {
+        return box;
+      }
+
+      box.expandByScalar(collisionThickness / 2);
+      return box;
+    };
+
     if (mode === "precise") {
       const boxes = [];
 
@@ -662,13 +680,13 @@ class PolygonalScene {
           return;
         }
 
-        boxes.push(new THREE.Box3().setFromObject(child));
+        boxes.push(expandVolume(new THREE.Box3().setFromObject(child)));
       });
 
-      return boxes.length > 0 ? boxes : [new THREE.Box3().setFromObject(object)];
+      return boxes.length > 0 ? boxes : [expandVolume(new THREE.Box3().setFromObject(object))];
     }
 
-    return [new THREE.Box3().setFromObject(object)];
+    return [expandVolume(new THREE.Box3().setFromObject(object))];
   }
 
   _hasCollisionBetween(a, b) {
@@ -1065,8 +1083,25 @@ class PolygonalScene {
   createPoint(options = {}) {
     const point = new THREE.Object3D();
     point.visible = options.visible ?? false;
+    point.userData.collisionMode = "none";
     applyTransform(point, options);
     return this._registerObject(point, options.id, options.pickable ?? false);
+  }
+
+  createCollisionPoint(options = {}) {
+    const geometry = new THREE.SphereGeometry(
+      options.radius ?? 0.15,
+      options.widthSegments ?? 16,
+      options.heightSegments ?? 12
+    );
+    const mesh = new THREE.Mesh(geometry, makeMaterial(this, options));
+    mesh.visible = options.visible ?? false;
+    mesh.castShadow = options.castShadow ?? false;
+    mesh.receiveShadow = options.receiveShadow ?? false;
+    mesh.userData.collisionMode = normalizeCollisionMode(options.collisionMode ?? "simple");
+    mesh.userData.collisionThickness = normalizeCollisionThickness(options.collisionThickness, 0);
+    applyTransform(mesh, options);
+    return this._registerObject(mesh, options.id, options.pickable ?? false);
   }
 
   createStretchPlane(points = [], options = {}) {
@@ -1087,6 +1122,8 @@ class PolygonalScene {
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
     mesh.castShadow = options.castShadow ?? false;
     mesh.receiveShadow = options.receiveShadow ?? true;
+    mesh.userData.collisionMode = normalizeCollisionMode(options.collisionMode ?? "simple");
+    mesh.userData.collisionThickness = normalizeCollisionThickness(options.collisionThickness, 0.05);
     const registered = this._registerObject(mesh, options.id, options.pickable ?? true);
 
     const descriptorId = registered.userData.polygonalId;

@@ -70,6 +70,19 @@ export type PointOptions = TransformOptions & {
   pickable?: boolean;
 };
 
+export type CollisionPointOptions = TransformOptions & MaterialOptions & {
+  id?: string;
+  radius?: number;
+  widthSegments?: number;
+  heightSegments?: number;
+  visible?: boolean;
+  pickable?: boolean;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  collisionMode?: CollisionMode;
+  collisionThickness?: number;
+};
+
 export type StretchPlaneOptions = {
   id?: string;
   color?: string;
@@ -81,6 +94,8 @@ export type StretchPlaneOptions = {
   pickable?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
+  collisionMode?: CollisionMode;
+  collisionThickness?: number;
 };
 
 export type SunDirectionOptions = {
@@ -299,6 +314,7 @@ export class PolygonalScene {
   createCylinder(options?: CylinderOptions): PolygonalObjectRef;
   createPlane(options?: PlaneOptions): PolygonalObjectRef;
   createPoint(options?: PointOptions): PolygonalObjectRef;
+  createCollisionPoint(options?: CollisionPointOptions): PolygonalObjectRef;
   createStretchPlane(points: Array<string | object>, options?: StretchPlaneOptions): PolygonalObjectRef | null;
   importOBJ(url: string, options?: ImportOBJOptions): Promise<PolygonalObjectRef>;
 

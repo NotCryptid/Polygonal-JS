@@ -118,10 +118,20 @@ const cylinder = scene.createCylinder({ radiusTop: 0.5, radiusBottom: 0.5, heigh
 const plane = scene.createPlane({ width: 20, height: 20, rotationX: -Math.PI / 2 });
 const pointA = scene.createPoint({ x: -2, y: 1, z: 0 });
 const pointB = scene.createPoint({ x: 2, y: 1, z: 0 });
+const collisionPoint = scene.createCollisionPoint({
+	x: 0,
+	y: 0.5,
+	z: 0,
+	radius: 0.2,
+	visible: true,
+	color: "#ffaa5f"
+});
 const stretch = scene.createStretchPlane([pointA, pointB], {
 	color: "#88c0ff",
 	opacity: 0.6,
-	width: 0.5
+	width: 0.5,
+	collisionMode: "simple",
+	collisionThickness: 0.08
 });
 ```
 
@@ -380,6 +390,8 @@ scene.clearFog();
 - Spring welds keep an object between `minLength` and `maxLength` from the anchor using `elasticity` as response speed.
 - Rope welds clamp distance to a max length (`length` or `maxLength`) and optionally support `minLength`.
 - Elastic welds are intentionally looser than spring welds and can use `slack` for extra rubber-band behavior.
+- `createPoint` is a non-colliding transform marker. Use `createCollisionPoint` when you need a point-like object that participates in collisions.
+- Stretch planes now support `collisionMode` and `collisionThickness` for reliable collision checks and physics blocking.
 
 ## License
 
