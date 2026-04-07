@@ -37,6 +37,14 @@ function normalizePositiveInteger(value, fallback) {
   return Math.round(normalized);
 }
 
+function normalizeFiniteNumber(value, fallback) {
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return value;
+}
+
 function degToRad(value) {
   return (value * Math.PI) / 180;
 }
@@ -2204,6 +2212,10 @@ class PolygonalScene {
   createInterface(options = {}) {
     const interfaceMode = options.mode === "surface" || options.mode === "overlay" ? options.mode : "overlay";
     const backgroundMode = options.backgroundMode ?? (interfaceMode === "overlay" && options.mode !== "overlay" ? options.mode : undefined);
+    const viewportWidth = this.interfaceLayer.clientWidth || this.renderer.domElement.clientWidth || this.container.clientWidth || window.innerWidth;
+    const viewportHeight = this.interfaceLayer.clientHeight || this.renderer.domElement.clientHeight || this.container.clientHeight || window.innerHeight;
+    const defaultWidth = options.mode === "stretch" ? viewportWidth : 160;
+    const defaultHeight = options.mode === "stretch" ? viewportHeight : 60;
 
     const id = options.id ?? nextId("ui");
     const element = document.createElement("div");
@@ -2255,17 +2267,17 @@ class PolygonalScene {
       layer: options.layer ?? 0,
       mode: interfaceMode,
       target: options.target ?? null,
-      localX: options.localX ?? 0,
-      localY: options.localY ?? 0,
-      localZ: options.localZ ?? 0,
-      x: options.x ?? this.renderer.domElement.clientWidth / 2,
-      y: options.y ?? this.renderer.domElement.clientHeight / 2,
-      width: options.width ?? 160,
-      height: options.height ?? 60,
-      rotation: options.rotation ?? 0,
-      scaleX: options.scaleX ?? 1,
-      scaleY: options.scaleY ?? 1,
-      opacity: options.opacity ?? 1
+      localX: normalizeFiniteNumber(options.localX, 0),
+      localY: normalizeFiniteNumber(options.localY, 0),
+      localZ: normalizeFiniteNumber(options.localZ, 0),
+      x: normalizeFiniteNumber(options.x, viewportWidth / 2),
+      y: normalizeFiniteNumber(options.y, viewportHeight / 2),
+      width: normalizePositiveNumber(options.width, defaultWidth),
+      height: normalizePositiveNumber(options.height, defaultHeight),
+      rotation: normalizeFiniteNumber(options.rotation, 0),
+      scaleX: normalizeFiniteNumber(options.scaleX, 1),
+      scaleY: normalizeFiniteNumber(options.scaleY, 1),
+      opacity: clamp(normalizeFiniteNumber(options.opacity, 1), 0, 1)
     });
 
     if (options.svg) {
@@ -2606,8 +2618,8 @@ class PolygonalScene {
     }
 
     iface.mode = "overlay";
-    iface.x = x;
-    iface.y = y;
+    iface.x = normalizeFiniteNumber(x, iface.x);
+    iface.y = normalizeFiniteNumber(y, iface.y);
     return true;
   }
 
@@ -2617,8 +2629,8 @@ class PolygonalScene {
       return false;
     }
 
-    iface.x += dx;
-    iface.y += dy;
+    iface.x += normalizeFiniteNumber(dx, 0);
+    iface.y += normalizeFiniteNumber(dy, 0);
     return true;
   }
 
@@ -2628,8 +2640,8 @@ class PolygonalScene {
       return false;
     }
 
-    iface.width = width;
-    iface.height = height;
+    iface.width = normalizePositiveNumber(width, iface.width);
+    iface.height = normalizePositiveNumber(height, iface.height);
     return true;
   }
 
@@ -2639,8 +2651,8 @@ class PolygonalScene {
       return false;
     }
 
-    iface.scaleX = scaleX;
-    iface.scaleY = scaleY;
+    iface.scaleX = normalizeFiniteNumber(scaleX, iface.scaleX);
+    iface.scaleY = normalizeFiniteNumber(scaleY, iface.scaleY);
     return true;
   }
 
@@ -2650,7 +2662,7 @@ class PolygonalScene {
       return false;
     }
 
-    iface.rotation = radians;
+    iface.rotation = normalizeFiniteNumber(radians, iface.rotation);
     return true;
   }
 
@@ -2660,7 +2672,7 @@ class PolygonalScene {
       return false;
     }
 
-    iface.opacity = 1 - clamp(transparency, 0, 1);
+    iface.opacity = 1 - clamp(normalizeFiniteNumber(transparency, 0), 0, 1);
     return true;
   }
 
