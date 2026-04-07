@@ -171,7 +171,15 @@ export type ElasticWeldOptions = {
   slack?: number;
 };
 
-export type WeldType = "spring" | "rope" | "elastic";
+export type DeformWeldOptions = {
+  id?: string;
+  minLength?: number;
+  durability?: number;
+  recovery?: number;
+  maxDeformation?: number;
+};
+
+export type WeldType = "spring" | "rope" | "elastic" | "deform";
 
 export type WeldInfo = {
   id: string;
@@ -183,6 +191,8 @@ export type WeldInfo = {
   maxLength?: number;
   elasticity?: number;
   slack?: number;
+  durability?: number;
+  deformation?: number;
 };
 
 export type CollisionMode = "none" | "simple" | "precise";
@@ -352,6 +362,7 @@ export class PolygonalScene {
   createSpringWeld(anchorTarget: string | object, memberTarget: string | object, options?: SpringWeldOptions): string | null;
   createRopeWeld(anchorTarget: string | object, memberTarget: string | object, options?: RopeWeldOptions): string | null;
   createElasticWeld(anchorTarget: string | object, memberTarget: string | object, options?: ElasticWeldOptions): string | null;
+  createDeformWeld(anchorTarget: string | object, memberTarget: string | object, options?: DeformWeldOptions): string | null;
   getWeld(weldId: string): WeldInfo | null;
   removeWeld(weldId: string): boolean;
 

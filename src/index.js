@@ -857,6 +857,60 @@ class PolygonalScene {
     return weldId;
   }
 
+  _createDeformWeld(anchorTarget, memberTarget, options = {}) {
+    const anchor = this._resolveObject(anchorTarget);
+    const member = this._resolveObject(memberTarget);
+
+    if (!anchor || !member) {
+      return null;
+    }
+
+    const anchorId = anchor.userData.polygonalId;
+    const memberId = member.userData.polygonalId;
+
+    if (!anchorId || !memberId || anchorId === memberId) {
+      return null;
+    }
+
+    anchor.updateMatrixWorld(true);
+    member.updateMatrixWorld(true);
+
+    const localMatrix = new THREE.Matrix4()
+      .copy(anchor.matrixWorld)
+      .invert()
+      .multiply(member.matrixWorld);
+
+    const baseLocalPosition = new THREE.Vector3();
+    const baseLocalQuaternion = new THREE.Quaternion();
+    const baseLocalScale = new THREE.Vector3();
+    localMatrix.decompose(baseLocalPosition, baseLocalQuaternion, baseLocalScale);
+
+    const anchorPosition = new THREE.Vector3();
+    const memberPosition = new THREE.Vector3();
+    anchor.getWorldPosition(anchorPosition);
+    member.getWorldPosition(memberPosition);
+    const initialDistance = anchorPosition.distanceTo(memberPosition);
+
+    const weldId = options.id ?? nextId("deform_weld");
+    this.welds.set(weldId, {
+      id: weldId,
+      weldType: "deform",
+      anchorId,
+      memberIds: [memberId],
+      offsets: new Map(),
+      baseLocalPosition,
+      baseLocalQuaternion,
+      baseLocalScale,
+      deformOffset: new THREE.Vector3(),
+      minLength: Math.max(0, options.minLength ?? 0),
+      durability: Math.max(0.1, options.durability ?? 1),
+      recovery: clamp(options.recovery ?? 0.08, 0, 1),
+      maxDeformation: Math.max(0, options.maxDeformation ?? Math.max(initialDistance * 2, 0.1))
+    });
+
+    return weldId;
+  }
+
   _updateWelds(delta = 1 / 60) {
     if (this.welds.size === 0) {
       return;
@@ -946,6 +1000,78 @@ class PolygonalScene {
           const response = clamp((weld.elasticity ?? 0.08) * 0.5 * Math.min(1, delta * 60), 0.01, 0.25);
           this._applyDistanceConstraint(anchor, member, minLength, response);
         }
+        continue;
+      }
+
+      if (weld.weldType === "deform") {
+        anchor.updateMatrixWorld(true);
+
+        const memberBody = this.physicsBodies.get(memberId);
+        const anchorBody = this.physicsBodies.get(weld.anchorId);
+
+        if (memberBody) {
+          const relativeVelocity = memberBody.velocity.clone().sub(anchorBody?.velocity ?? new THREE.Vector3());
+          const impactSpeed = relativeVelocity.length();
+          const impactThreshold = 2;
+
+          if (impactSpeed > impactThreshold) {
+            const worldDirection = relativeVelocity.normalize();
+            const anchorInverse = new THREE.Matrix4().copy(anchor.matrixWorld).invert();
+            const localDirection = worldDirection.transformDirection(anchorInverse);
+            const deformationGain = ((impactSpeed - impactThreshold) * 0.02) / Math.max(0.1, weld.durability ?? 1);
+            weld.deformOffset.addScaledVector(localDirection, deformationGain);
+          }
+        }
+
+        const maxDeformation = Math.max(0, weld.maxDeformation ?? 0);
+        if (weld.deformOffset.length() > maxDeformation && maxDeformation > 0) {
+          weld.deformOffset.setLength(maxDeformation);
+        }
+
+        const recoveryFactor = clamp((weld.recovery ?? 0.08) * (weld.durability ?? 1) * delta * 60, 0, 1);
+        if (recoveryFactor > 0) {
+          weld.deformOffset.multiplyScalar(1 - recoveryFactor);
+        }
+
+        const targetLocalPosition = weld.baseLocalPosition.clone().add(weld.deformOffset);
+        const targetLocalMatrix = new THREE.Matrix4().compose(
+          targetLocalPosition,
+          weld.baseLocalQuaternion,
+          weld.baseLocalScale
+        );
+
+        const targetWorldMatrix = new THREE.Matrix4().multiplyMatrices(anchor.matrixWorld, targetLocalMatrix);
+        const targetWorldPosition = new THREE.Vector3();
+        const targetWorldQuaternion = new THREE.Quaternion();
+        const targetWorldScale = new THREE.Vector3();
+        targetWorldMatrix.decompose(targetWorldPosition, targetWorldQuaternion, targetWorldScale);
+
+        const currentAnchorPosition = new THREE.Vector3();
+        anchor.getWorldPosition(currentAnchorPosition);
+        const direction = targetWorldPosition.clone().sub(currentAnchorPosition);
+        const currentLength = direction.length();
+        const minLength = Math.max(0, weld.minLength ?? 0);
+
+        if (currentLength < minLength) {
+          if (currentLength < 1e-6) {
+            direction.set(1, 0, 0);
+          } else {
+            direction.normalize();
+          }
+
+          const clampedWorldPosition = currentAnchorPosition.clone().addScaledVector(direction, minLength);
+          const clampedLocalPosition = anchor.worldToLocal(clampedWorldPosition.clone());
+          weld.deformOffset.copy(clampedLocalPosition.sub(weld.baseLocalPosition));
+
+          targetLocalPosition.copy(weld.baseLocalPosition).add(weld.deformOffset);
+          targetLocalMatrix.compose(targetLocalPosition, weld.baseLocalQuaternion, weld.baseLocalScale);
+          targetWorldMatrix.multiplyMatrices(anchor.matrixWorld, targetLocalMatrix);
+          targetWorldMatrix.decompose(targetWorldPosition, targetWorldQuaternion, targetWorldScale);
+        }
+
+        member.position.copy(targetWorldPosition);
+        member.quaternion.copy(targetWorldQuaternion);
+        member.scale.copy(targetWorldScale);
         continue;
       }
 
@@ -1648,6 +1774,10 @@ class PolygonalScene {
     return this._createDistanceWeld("elastic", anchorTarget, memberTarget, options);
   }
 
+  createDeformWeld(anchorTarget, memberTarget, options = {}) {
+    return this._createDeformWeld(anchorTarget, memberTarget, options);
+  }
+
   getWeld(weldId) {
     const weld = this.welds.get(weldId);
     if (!weld || weld.weldType === "group") {
@@ -1675,6 +1805,12 @@ class PolygonalScene {
 
     if (weld.weldType === "elastic") {
       info.slack = weld.slack ?? 0;
+    }
+
+    if (weld.weldType === "deform") {
+      info.minLength = weld.minLength ?? 0;
+      info.durability = weld.durability ?? 0;
+      info.deformation = weld.deformOffset?.length?.() ?? 0;
     }
 
     return info;

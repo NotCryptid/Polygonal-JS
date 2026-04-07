@@ -210,7 +210,7 @@ const groupInfo = scene.getGroup("playerGear");
 scene.removeGroup("playerGear");
 ```
 
-### Welds (Spring, Rope, Elastic)
+### Welds (Spring, Rope, Elastic, Deform)
 
 ```js
 const springWeld = scene.createSpringWeld(player, crate, {
@@ -229,6 +229,11 @@ const elasticWeld = scene.createElasticWeld(hand, balloon, {
 	maxLength: 5,
 	elasticity: 0.1,
 	slack: 0.75
+});
+
+const deformWeld = scene.createDeformWeld(hinge, plate, {
+	minLength: 0.4,
+	durability: 1.5
 });
 
 const springInfo = scene.getWeld(springWeld);
@@ -390,6 +395,7 @@ scene.clearFog();
 - Spring welds keep an object between `minLength` and `maxLength` from the anchor using `elasticity` as response speed.
 - Rope welds clamp distance to a max length (`length` or `maxLength`) and optionally support `minLength`.
 - Elastic welds are intentionally looser than spring welds and can use `slack` for extra rubber-band behavior.
+- Deform welds behave like rigid welds but can bend offset under impact; `durability` controls how strongly they resist deformation and `minLength` prevents collapse too close to the anchor.
 - `createPoint` is a non-colliding transform marker. Use `createCollisionPoint` when you need a point-like object that participates in collisions.
 - Stretch planes now support `collisionMode` and `collisionThickness` for reliable collision checks and physics blocking.
 
