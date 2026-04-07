@@ -35,8 +35,17 @@ npm install polygonal-js
 		</style>
 	</head>
 	<body>
+		<script type="importmap">
+			{
+				"imports": {
+					"polygonal-js": "./node_modules/polygonal-js/src/index.js",
+					"three": "./node_modules/three/build/three.module.js",
+					"three/examples/jsm/": "./node_modules/three/examples/jsm/"
+				}
+			}
+		</script>
 		<script type="module">
-			import { createScene } from "./node_modules/polygonal-js/src/index.js";
+			import { createScene } from "polygonal-js";
 
 			// One command creates a full-page empty 3D scene and starts rendering.
 			const scene = createScene();
@@ -362,6 +371,7 @@ scene.clearFog();
 ## Notes
 
 - Works in modern browsers and Electron renderer windows.
+- If you are using raw browser modules (no Vite/Webpack/etc), add an `importmap` for `polygonal-js` and `three` as shown above.
 - For Electron, run this from the renderer process (not the main process).
 - `rotateObjectTo`, `rotateObjectBy`, `rotateGroupBy`, and `rotateCameraTo` use degrees.
 - Created objects expose direct helper methods (for example `object.moveObjectBy(...)`) in addition to scene-level methods.
