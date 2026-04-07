@@ -13,7 +13,7 @@ Simple 3D library for HTML and Electron with a Scratch/PXT-style coding flow.
 ## Install
 
 ```bash
-npm install polygonal-js three
+npm install polygonal-js
 ```
 
 ## Quick Start (HTML)
