@@ -2003,18 +2003,8 @@ class PolygonalScene {
     const content = document.createElement("div");
     content.style.width = "100%";
     content.style.height = "100%";
-    content.style.display = "flex";
-    content.style.alignItems = options.alignY ?? "center";
-    content.style.justifyContent = options.alignX ?? "center";
-    content.style.textAlign = "center";
-    content.style.color = options.color ?? "#ffffff";
-    content.style.fontSize = `${options.fontSize ?? 16}px`;
-
-    if (options.svg) {
-      content.innerHTML = options.svg;
-    } else {
-      content.textContent = options.text ?? "";
-    }
+    content.style.position = "relative";
+    content.style.overflow = "hidden";
 
     element.appendChild(content);
     this.interfaceLayer.appendChild(element);
@@ -2023,8 +2013,13 @@ class PolygonalScene {
       id,
       element,
       content,
+      objects: new Map(),
       clickable,
       clickHandlers: new Set(),
+      alignX: options.alignX ?? "center",
+      alignY: options.alignY ?? "center",
+      color: options.color ?? "#ffffff",
+      fontSize: options.fontSize ?? 16,
       layer: options.layer ?? 0,
       mode: options.mode === "surface" ? "surface" : "overlay",
       target: options.target ?? null,
@@ -2040,6 +2035,12 @@ class PolygonalScene {
       scaleY: options.scaleY ?? 1,
       opacity: options.opacity ?? 1
     });
+
+    if (options.svg) {
+      this.setInterfaceSVG(id, options.svg);
+    } else if (options.text !== undefined) {
+      this.setInterfaceText(id, options.text);
+    }
 
     if (typeof options.onClick === "function") {
       this.onInterfaceClick(id, options.onClick);
@@ -2064,8 +2065,32 @@ class PolygonalScene {
       return false;
     }
 
-    iface.content.innerHTML = "";
-    iface.content.textContent = text;
+    const legacyId = "__legacy_content";
+    let descriptor = iface.objects.get(legacyId);
+
+    if (!descriptor) {
+      const element = document.createElement("div");
+      element.style.position = "absolute";
+      element.style.left = "50%";
+      element.style.top = "50%";
+      element.style.transform = "translate(-50%, -50%)";
+      element.style.display = "flex";
+      element.style.alignItems = iface.alignY;
+      element.style.justifyContent = iface.alignX;
+      element.style.width = "100%";
+      element.style.height = "100%";
+      element.style.textAlign = "center";
+      element.style.pointerEvents = "none";
+      iface.content.appendChild(element);
+      descriptor = { id: legacyId, type: "text", element };
+      iface.objects.set(legacyId, descriptor);
+    }
+
+    descriptor.type = "text";
+    descriptor.element.innerHTML = "";
+    descriptor.element.textContent = text;
+    descriptor.element.style.color = iface.color;
+    descriptor.element.style.fontSize = `${iface.fontSize}px`;
     return true;
   }
 
@@ -2075,7 +2100,131 @@ class PolygonalScene {
       return false;
     }
 
-    iface.content.innerHTML = svgMarkup;
+    const legacyId = "__legacy_content";
+    let descriptor = iface.objects.get(legacyId);
+
+    if (!descriptor) {
+      const element = document.createElement("div");
+      element.style.position = "absolute";
+      element.style.left = "50%";
+      element.style.top = "50%";
+      element.style.transform = "translate(-50%, -50%)";
+      element.style.width = "100%";
+      element.style.height = "100%";
+      element.style.pointerEvents = "none";
+      iface.content.appendChild(element);
+      descriptor = { id: legacyId, type: "svg", element };
+      iface.objects.set(legacyId, descriptor);
+    }
+
+    descriptor.type = "svg";
+    descriptor.element.innerHTML = svgMarkup;
+    return true;
+  }
+
+  createInterfaceText(interfaceId, options = {}) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return null;
+    }
+
+    const objectId = options.id ?? nextId("ui_text");
+    const element = document.createElement("div");
+    element.style.position = "absolute";
+    element.style.left = `${options.x ?? 0}px`;
+    element.style.top = `${options.y ?? 0}px`;
+    element.style.width = options.width !== undefined ? `${options.width}px` : "auto";
+    element.style.height = options.height !== undefined ? `${options.height}px` : "auto";
+    element.style.color = options.color ?? iface.color;
+    element.style.fontSize = `${options.fontSize ?? iface.fontSize}px`;
+    element.style.fontWeight = options.fontWeight ?? "normal";
+    element.style.textAlign = options.align ?? "left";
+    element.style.pointerEvents = options.clickable ? "auto" : "none";
+    element.textContent = options.text ?? "";
+
+    iface.content.appendChild(element);
+    iface.objects.set(objectId, {
+      id: objectId,
+      type: "text",
+      element
+    });
+
+    return objectId;
+  }
+
+  createInterfaceImage(interfaceId, options = {}) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return null;
+    }
+
+    const objectId = options.id ?? nextId("ui_image");
+    const element = document.createElement("img");
+    element.style.position = "absolute";
+    element.style.left = `${options.x ?? 0}px`;
+    element.style.top = `${options.y ?? 0}px`;
+    element.style.width = `${options.width ?? 64}px`;
+    element.style.height = `${options.height ?? 64}px`;
+    element.style.objectFit = options.fit ?? "contain";
+    element.style.pointerEvents = options.clickable ? "auto" : "none";
+
+    if (options.src) {
+      element.src = options.src;
+    }
+
+    iface.content.appendChild(element);
+    iface.objects.set(objectId, {
+      id: objectId,
+      type: "image",
+      element
+    });
+
+    return objectId;
+  }
+
+  setInterfaceObjectText(interfaceId, objectId, text) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    const descriptor = iface.objects.get(objectId);
+    if (!descriptor || descriptor.type !== "text") {
+      return false;
+    }
+
+    descriptor.element.textContent = text;
+    return true;
+  }
+
+  setInterfaceObjectImage(interfaceId, objectId, src) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    const descriptor = iface.objects.get(objectId);
+    if (!descriptor || descriptor.type !== "image") {
+      return false;
+    }
+
+    descriptor.element.src = src;
+    return true;
+  }
+
+  removeInterfaceObject(interfaceId, objectId) {
+    const iface = this.interfaces.get(interfaceId);
+    if (!iface) {
+      return false;
+    }
+
+    const descriptor = iface.objects.get(objectId);
+    if (!descriptor) {
+      return false;
+    }
+
+    descriptor.element.remove();
+    iface.objects.delete(objectId);
     return true;
   }
 

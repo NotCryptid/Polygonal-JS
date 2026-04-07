@@ -278,6 +278,31 @@ export type InterfaceOptions = {
   alignY?: string;
 };
 
+export type InterfaceTextOptions = {
+  id?: string;
+  text?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  color?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  align?: string;
+  clickable?: boolean;
+};
+
+export type InterfaceImageOptions = {
+  id?: string;
+  src?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fit?: string;
+  clickable?: boolean;
+};
+
 export type InterfaceClickEvent = {
   id: string;
   x: number;
@@ -378,6 +403,11 @@ export class PolygonalScene {
   getSound(soundId: string): SoundInfo | null;
 
   createInterface(options?: InterfaceOptions): string;
+  createInterfaceText(interfaceId: string, options?: InterfaceTextOptions): string | null;
+  createInterfaceImage(interfaceId: string, options?: InterfaceImageOptions): string | null;
+  setInterfaceObjectText(interfaceId: string, objectId: string, text: string): boolean;
+  setInterfaceObjectImage(interfaceId: string, objectId: string, src: string): boolean;
+  removeInterfaceObject(interfaceId: string, objectId: string): boolean;
   removeInterface(interfaceId: string): boolean;
   setInterfaceText(interfaceId: string, text: string): boolean;
   setInterfaceSVG(interfaceId: string, svgMarkup: string): boolean;

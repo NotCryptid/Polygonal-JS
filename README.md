@@ -322,11 +322,27 @@ const hud = scene.createInterface({
 	y: 50,
 	width: 180,
 	height: 48,
-	text: "Health: 100",
 	background: "rgba(0,0,0,0.45)",
-	color: "#ffffff",
-	fontSize: 20,
 	onClick: ({ id }) => console.log("clicked", id)
+});
+
+const hudText = scene.createInterfaceText("hudHealth", {
+	id: "hudHealthText",
+	text: "Health: 100",
+	x: 12,
+	y: 12,
+	color: "#ffffff",
+	fontSize: 20
+});
+
+const hudIcon = scene.createInterfaceImage("hudHealth", {
+	id: "hudHealthIcon",
+	src: "./assets/heart.png",
+	x: 140,
+	y: 8,
+	width: 28,
+	height: 28,
+	fit: "contain"
 });
 
 const badge = scene.createInterface({
@@ -337,12 +353,21 @@ const badge = scene.createInterface({
 	localY: 1.2,
 	localZ: 0.02,
 	width: 120,
-	height: 60,
-	svg: '<svg viewBox="0 0 100 50"><rect width="100" height="50" fill="#1d4ed8"/><text x="50" y="30" text-anchor="middle" fill="white">OPEN</text></svg>'
+	height: 60
 });
 
-scene.setInterfaceText("hudHealth", "Health: 85");
-scene.setInterfaceSVG("doorBadge", '<svg viewBox="0 0 100 50"><rect width="100" height="50" fill="#dc2626"/></svg>');
+scene.createInterfaceText("doorBadge", {
+	id: "doorBadgeText",
+	text: "OPEN",
+	x: 34,
+	y: 18,
+	color: "#ffffff",
+	fontSize: 16,
+	fontWeight: "700"
+});
+
+scene.setInterfaceObjectText("hudHealth", "hudHealthText", "Health: 85");
+scene.setInterfaceObjectImage("hudHealth", "hudHealthIcon", "./assets/heart_low.png");
 scene.moveInterfaceBy("hudHealth", 10, 0);
 scene.resizeInterface("hudHealth", 220, 56);
 scene.stretchInterface("hudHealth", 1.2, 1);
@@ -358,6 +383,7 @@ offClick();
 scene.attachInterfaceToObject("hudHealth", player, { localY: 2.2, localZ: 0 });
 scene.setInterfaceMode("hudHealth", "overlay");
 scene.setInterfaceScreenPosition("hudHealth", 150, 40);
+scene.removeInterfaceObject("hudHealth", "hudHealthIcon");
 scene.removeInterface("doorBadge");
 ```
 
