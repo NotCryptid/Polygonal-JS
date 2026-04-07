@@ -34,6 +34,7 @@ export type SceneOptions = {
   displayHeight?: number;
   displayMode?: RenderScaleMode;
   letterboxColor?: string;
+  performanceOverlay?: boolean;
   autoStart?: boolean;
 };
 
@@ -58,6 +59,34 @@ export type RenderSettings = {
   displayHeight?: number;
   displayMode: RenderScaleMode;
   letterboxColor: string;
+};
+
+export type PerformanceWeldBreakdown = {
+  total: number;
+  spring: number;
+  rope: number;
+  elastic: number;
+  deform: number;
+};
+
+export type PerformanceStats = {
+  fps: number;
+  renderResolution: {
+    width: number;
+    height: number;
+  };
+  viewportSize: {
+    width: number;
+    height: number;
+  };
+  polygonCount: number;
+  objectCount: number;
+  guiFrameCount: number;
+  guiElementCount: number;
+  physicsObjectCount: number;
+  weldCount: number;
+  weldBreakdown: PerformanceWeldBreakdown;
+  groupCount: number;
 };
 
 export type BoxOptions = TransformOptions & MaterialOptions & {
@@ -253,6 +282,8 @@ export type PolygonalObjectRef = object & {
   addForce(fx?: number, fy?: number, fz?: number): boolean;
   distanceToObject(other: string | object): number | null;
   remove(): boolean;
+  destroy(): boolean;
+  Destroy(): boolean;
 };
 
 export type SoundOptions = {
@@ -383,6 +414,7 @@ export class PolygonalScene {
   start(): void;
   stop(): void;
   destroy(): void;
+  Destroy(): void;
   resize(): void;
   setRenderResolution(width: number, height: number): void;
   setDisplayResolution(width: number, height: number): void;
@@ -390,6 +422,12 @@ export class PolygonalScene {
   setRenderScaleMode(mode?: RenderScaleMode): void;
   setLetterboxColor(color?: string): void;
   getRenderSettings(): RenderSettings;
+  showPerformanceOverlay(): void;
+  hidePerformanceOverlay(): void;
+  togglePerformanceOverlay(enabled?: boolean): void;
+  isPerformanceOverlayVisible(): boolean;
+  getPerformanceStats(): PerformanceStats;
+  getSceneStats(): PerformanceStats;
 
   onUpdate(callback: (delta: number) => void): () => void;
 

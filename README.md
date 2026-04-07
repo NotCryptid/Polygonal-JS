@@ -108,9 +108,31 @@ const scene = createScene({
 	renderWidth: 1920,
 	renderHeight: 1080,
 	displayMode: "fit",
+	performanceOverlay: true,
 	letterboxColor: "#000000",
 	autoStart: true
 });
+```
+
+### Performance Overlay + Stats API
+
+```js
+scene.showPerformanceOverlay();
+scene.hidePerformanceOverlay();
+scene.togglePerformanceOverlay();
+
+const stats = scene.getPerformanceStats();
+// alias: scene.getSceneStats()
+
+console.log(stats.fps);
+console.log(stats.renderResolution.width, stats.renderResolution.height);
+console.log(stats.viewportSize.width, stats.viewportSize.height);
+console.log(stats.polygonCount);
+console.log(stats.objectCount);
+console.log(stats.guiFrameCount, stats.guiElementCount);
+console.log(stats.physicsObjectCount);
+console.log(stats.weldCount, stats.weldBreakdown);
+console.log(stats.groupCount);
 ```
 
 ### Render Resolution + Output Scaling
@@ -185,6 +207,10 @@ box.setObjectReflectance(0.8);
 box.setObjectCollisionMode("precise"); // none | simple | precise
 box.enableObjectOutline({ color: "#ffffff", opacity: 0.9 });
 box.disableObjectOutline();
+
+// Roblox-like destroy aliases are also available.
+box.destroy();
+box.Destroy();
 
 box.remove();
 ```

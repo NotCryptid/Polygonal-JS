@@ -292,12 +292,24 @@ class PolygonalScene {
       floorY: null
     };
     this.sunDirectionBinding = null;
+    this.performanceOverlay = {
+      enabled: false,
+      element: null,
+      frameCount: 0,
+      elapsed: 0,
+      fps: 0
+    };
 
     this._setupContainer();
     this._setupBaseLights();
     this._setupInterfaceLayer();
+    this._setupPerformanceOverlay();
     this._attachEvents();
     this.resize();
+
+    if (options.performanceOverlay) {
+      this.showPerformanceOverlay();
+    }
 
     if (options.autoStart !== false) {
       this.start();
@@ -357,6 +369,157 @@ class PolygonalScene {
     this.moonLight.position.set(-40, -30, -20);
     this.scene.add(this.moonLight);
     this.lights.set("moon_default", this.moonLight);
+  }
+
+  _setupPerformanceOverlay() {
+    this.performanceOverlay.element = document.createElement("div");
+    this.performanceOverlay.element.style.position = "absolute";
+    this.performanceOverlay.element.style.left = "8px";
+    this.performanceOverlay.element.style.top = "8px";
+    this.performanceOverlay.element.style.padding = "8px 10px";
+    this.performanceOverlay.element.style.background = "rgba(0, 0, 0, 0.66)";
+    this.performanceOverlay.element.style.color = "#d1f5ff";
+    this.performanceOverlay.element.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace";
+    this.performanceOverlay.element.style.fontSize = "12px";
+    this.performanceOverlay.element.style.lineHeight = "1.35";
+    this.performanceOverlay.element.style.whiteSpace = "pre";
+    this.performanceOverlay.element.style.border = "1px solid rgba(209, 245, 255, 0.28)";
+    this.performanceOverlay.element.style.borderRadius = "6px";
+    this.performanceOverlay.element.style.pointerEvents = "none";
+    this.performanceOverlay.element.style.zIndex = "2147483647";
+    this.performanceOverlay.element.style.display = "none";
+    this.container.appendChild(this.performanceOverlay.element);
+  }
+
+  _calculateWeldStats() {
+    const weldStats = {
+      total: 0,
+      spring: 0,
+      rope: 0,
+      elastic: 0,
+      deform: 0
+    };
+
+    let groupCount = 0;
+
+    for (const weld of this.welds.values()) {
+      if (weld.weldType === "group") {
+        groupCount += 1;
+        continue;
+      }
+
+      weldStats.total += 1;
+
+      if (weld.weldType === "spring") {
+        weldStats.spring += 1;
+      } else if (weld.weldType === "rope") {
+        weldStats.rope += 1;
+      } else if (weld.weldType === "elastic") {
+        weldStats.elastic += 1;
+      } else if (weld.weldType === "deform") {
+        weldStats.deform += 1;
+      }
+    }
+
+    return { weldStats, groupCount };
+  }
+
+  getPerformanceStats() {
+    const renderSize = new THREE.Vector2();
+    this.renderer.getSize(renderSize);
+
+    const guiElementCount = [...this.interfaces.values()].reduce((sum, iface) => sum + iface.objects.size, 0);
+    const viewportWidth = this.renderer.domElement.clientWidth || this.container.clientWidth || window.innerWidth;
+    const viewportHeight = this.renderer.domElement.clientHeight || this.container.clientHeight || window.innerHeight;
+    const { weldStats, groupCount } = this._calculateWeldStats();
+
+    return {
+      fps: this.performanceOverlay.fps,
+      renderResolution: {
+        width: renderSize.x,
+        height: renderSize.y
+      },
+      viewportSize: {
+        width: viewportWidth,
+        height: viewportHeight
+      },
+      polygonCount: this.renderer.info.render.triangles,
+      objectCount: this.objects.size,
+      guiFrameCount: this.interfaces.size,
+      guiElementCount,
+      physicsObjectCount: this.physicsBodies.size,
+      weldCount: weldStats.total,
+      weldBreakdown: weldStats,
+      groupCount
+    };
+  }
+
+  getSceneStats() {
+    return this.getPerformanceStats();
+  }
+
+  _updatePerformanceOverlay(delta = 0) {
+    if (!this.performanceOverlay.enabled || !this.performanceOverlay.element) {
+      return;
+    }
+
+    this.performanceOverlay.frameCount += 1;
+    this.performanceOverlay.elapsed += delta;
+
+    if (this.performanceOverlay.elapsed >= 0.25) {
+      this.performanceOverlay.fps = this.performanceOverlay.frameCount / this.performanceOverlay.elapsed;
+      this.performanceOverlay.frameCount = 0;
+      this.performanceOverlay.elapsed = 0;
+    }
+
+    const stats = this.getPerformanceStats();
+    this.performanceOverlay.element.textContent = [
+      `FPS: ${stats.fps.toFixed(1)}`,
+      `Render: ${stats.renderResolution.width} x ${stats.renderResolution.height}`,
+      `Viewport: ${stats.viewportSize.width} x ${stats.viewportSize.height}`,
+      `Polygons: ${stats.polygonCount}`,
+      `Objects: ${stats.objectCount}`,
+      `GUI Frames: ${stats.guiFrameCount}`,
+      `GUI Elements: ${stats.guiElementCount}`,
+      `Physics Objects: ${stats.physicsObjectCount}`,
+      `Welds: ${stats.weldCount} (S:${stats.weldBreakdown.spring} R:${stats.weldBreakdown.rope} E:${stats.weldBreakdown.elastic} D:${stats.weldBreakdown.deform})`,
+      `Groups: ${stats.groupCount}`
+    ].join("\n");
+  }
+
+  showPerformanceOverlay() {
+    this.performanceOverlay.enabled = true;
+    if (this.performanceOverlay.element) {
+      this.performanceOverlay.element.style.display = "block";
+    }
+  }
+
+  hidePerformanceOverlay() {
+    this.performanceOverlay.enabled = false;
+    if (this.performanceOverlay.element) {
+      this.performanceOverlay.element.style.display = "none";
+    }
+  }
+
+  togglePerformanceOverlay(enabled) {
+    if (enabled === undefined) {
+      if (this.performanceOverlay.enabled) {
+        this.hidePerformanceOverlay();
+      } else {
+        this.showPerformanceOverlay();
+      }
+      return;
+    }
+
+    if (enabled) {
+      this.showPerformanceOverlay();
+    } else {
+      this.hidePerformanceOverlay();
+    }
+  }
+
+  isPerformanceOverlayVisible() {
+    return this.performanceOverlay.enabled;
   }
 
   _attachEvents() {
@@ -424,6 +587,8 @@ class PolygonalScene {
     define("addForce", (fx = 0, fy = 0, fz = 0) => this.addForce(object, fx, fy, fz));
     define("distanceToObject", (other) => this.getDistanceBetweenObjects(object, other));
     define("remove", () => this.removeObject(object));
+    define("destroy", () => this.removeObject(object));
+    define("Destroy", () => this.removeObject(object));
 
     object.userData.polygonalShortcutsAttached = true;
   }
@@ -1256,6 +1421,7 @@ class PolygonalScene {
       this.updateCallbacks.forEach((callback) => callback(delta));
 
       this.renderer.render(this.scene, this.camera);
+      this._updatePerformanceOverlay(delta);
       this._raf = window.requestAnimationFrame(tick);
     };
 
@@ -1295,6 +1461,20 @@ class PolygonalScene {
     if (this.interfaceLayer?.parentElement) {
       this.interfaceLayer.parentElement.removeChild(this.interfaceLayer);
     }
+
+    if (this.performanceOverlay?.element?.parentElement) {
+      this.performanceOverlay.element.parentElement.removeChild(this.performanceOverlay.element);
+    }
+
+    this.performanceOverlay.enabled = false;
+    this.performanceOverlay.element = null;
+    this.performanceOverlay.frameCount = 0;
+    this.performanceOverlay.elapsed = 0;
+    this.performanceOverlay.fps = 0;
+  }
+
+  Destroy() {
+    this.destroy();
   }
 
   onUpdate(callback) {
